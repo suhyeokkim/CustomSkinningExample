@@ -10,7 +10,6 @@
     {
         [Header("Character script for InstancedSkinning"), Space()]
         public CharacterData data;
-        public bool isSkinned;
         public bool isAnimated;
         public RuntimeAnimatorController animatorController;
 
@@ -18,39 +17,19 @@
         MeshRenderer meshRenderer;
         SkinnedMeshRenderer skinnedMeshRenderer;
         Animator animator;
-        Transform[] bones;
+        public Transform[] bones;
         Matrix4x4[] startBoneMatrixArray;
         Vector3[] startPosArray;
-        MaterialPropertyBlock block;
+        InstancedData instancedData;
+
+        public struct InstancedData
+        {
+            public Matrix4x4[] boneTransformMatrix;
+            public Vector4[] bonePosition;
+        }
 
         public void BuildComponents()
         {
-            block = new MaterialPropertyBlock();
-
-            if (isSkinned)
-            {
-                skinnedMeshRenderer = GetComponent<SkinnedMeshRenderer>();
-
-                if (skinnedMeshRenderer == null)
-                    skinnedMeshRenderer = gameObject.AddComponent<SkinnedMeshRenderer>();
-
-                skinnedMeshRenderer.receiveShadows = false;
-            }
-            else
-            {
-                meshFilter = GetComponent<MeshFilter>();
-
-                if (meshFilter == null)
-                    meshFilter = gameObject.AddComponent<MeshFilter>();
-
-                meshRenderer = GetComponent<MeshRenderer>();
-
-                if (meshRenderer == null)
-                    meshRenderer = gameObject.AddComponent<MeshRenderer>();
-
-                meshRenderer.receiveShadows = false;
-            }
-
             if (isAnimated)
             {
                 animator = GetComponent<Animator>();
@@ -64,7 +43,7 @@
             }
         }
 
-        public Mesh BuildMesh(Transform[] boneArray)
+        public static Mesh BuildMesh(CharacterData data)
         {
             Mesh mesh = new Mesh();
 
@@ -77,23 +56,14 @@
             mesh.vertices = vertices;
             mesh.triangles = indices;
 
-            Vector2[] uvs = null;
+            Vector3[] uvs = null;
             UVMapper.GetUV(ref uvs, data.GetUVPoses(), data.GetUVSizes());
-            mesh.uv = uvs;
-
-            Matrix4x4[] bindPoses = null;
-            BoneWeight[] weight = null;
-
-            SkinMapper.GetBoneWieghts(ref weight);
-            Rigger.GetBindPoses(ref bindPoses, transform, boneArray);
-
-            mesh.boneWeights = weight;
-            mesh.bindposes = bindPoses;
-
+            mesh.SetUVs(0, new List<Vector3>(uvs));
+            
             return mesh;
         }
 
-        public Mesh BuildMesh(Transform[] boneArray, int textureIndex)
+        public static Mesh BuildMesh(CharacterData data, Transform transform, Transform[] boneArray, int textureIndex)
         {
             Mesh mesh = new Mesh();
 
@@ -138,7 +108,7 @@
                            );
         }
 
-        public void BuildCharacter(Mesh mesh, Material material, Transform[] boneArray, bool receiveShaodws, bool castShadow)
+        public void BuildCharacter(Mesh mesh, Material material, Transform[] boneArray)
         {
             BuildComponents();
 
@@ -152,33 +122,12 @@
             startBoneMatrixArray = Array.ConvertAll(bones, (bone) => Matrix4x4.TRS(Vector3.zero, bone.localRotation, bone.localScale).inverse);
             startPosArray = Array.ConvertAll(bones, (bone) => bone.localPosition);
 
-            if (mesh == null)
-                mesh = BuildMesh(boneArray);
-
-            if (isSkinned)
-            {
-                skinnedMeshRenderer.sharedMesh = mesh;
-                skinnedMeshRenderer.material = material;
-                skinnedMeshRenderer.bones = boneArray;
-                skinnedMeshRenderer.rootBone = transform;
-
-                skinnedMeshRenderer.receiveShadows = receiveShaodws;
-                skinnedMeshRenderer.shadowCastingMode = castShadow? ShadowCastingMode.On: ShadowCastingMode.Off;
-
-                skinnedMeshRenderer.SetPropertyBlock(block);
-            }
-            else
-            {
-                meshFilter.sharedMesh = mesh;
-                meshRenderer.sharedMaterial = material;
-
-                meshRenderer.receiveShadows = receiveShaodws;
-                meshRenderer.shadowCastingMode = castShadow ? ShadowCastingMode.On : ShadowCastingMode.Off;
-
-                meshRenderer.SetPropertyBlock(block);
-            }
-
             bones[0].localEulerAngles = new Vector3(0f, UnityEngine.Random.Range(-90f, 90f), 0f);
+
+            instancedData = new InstancedData();
+
+            instancedData.boneTransformMatrix = new Matrix4x4[bones.Length];
+            instancedData.bonePosition = new Vector4[bones.Length];
         }
 
         public void CopyEachBoneInfo(ref Matrix4x4[] matrixArray, ref Vector4[] posArray, int startIndex)
@@ -191,26 +140,18 @@
             }
         }
 
-        void Update()
+        public InstancedData GetInstancedData()
         {
             for (int i = 0; i < bones.Length; i++)
             {
                 Transform bone = bones[i];
                 Vector3 pos = bone.localPosition;
 
-                block.SetMatrix(string.Format("_BoneTransfromMatrix{0}", i), Matrix4x4.TRS(Vector3.zero, bone.localRotation, bone.localScale));
-                block.SetVector(string.Format("_BonePosition{0}", i), new Vector4(pos.x, pos.y, pos.z, 1f));
-                block.SetColor("_Color", Color.white);
+                instancedData.boneTransformMatrix[i] = Matrix4x4.TRS(Vector3.zero, bone.localRotation, bone.localScale);
+                instancedData.bonePosition[i] = new Vector4(pos.x, pos.y, pos.z, 1f);
             }
 
-            if (isSkinned)
-            {
-                skinnedMeshRenderer.SetPropertyBlock(block);
-            }
-            else
-            {
-                meshRenderer.SetPropertyBlock(block);
-            }
+            return instancedData;
         }
     }
 }

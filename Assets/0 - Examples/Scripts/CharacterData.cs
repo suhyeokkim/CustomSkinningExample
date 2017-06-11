@@ -26,14 +26,9 @@ public struct Int3
 [CreateAssetMenu(fileName = "CharData")]
 public class CharacterData : ScriptableObject
 {
-    [SerializeField]
-    private string characterName = "Steve";
-
-    [SerializeField]
-    private Texture2D texture;
-
-    [SerializeField]
-    private Int3[] bodySizeArray = new Int3[] {
+    public string characterName = "Steve";
+    public Texture2D texture;
+    public Int3[] bodySizeArray = new Int3[] {
         new Int3(8, 8, 8),          // HEAD
         new Int3(8, 12, 4),         // BODY
         new Int3(4, 12, 4),         // LARM
@@ -41,9 +36,7 @@ public class CharacterData : ScriptableObject
         new Int3(4, 12, 4),         // LLEG
         new Int3(4, 12, 4),         // RLEG
     };
-
-    public string charName { get { return characterName; } private set { characterName = value; } }
-    public Texture2D charTexture { get { return texture; } }
+    //public Mesh meshData;
 
     public static float defaultBodyMultipiler = 0.0625f;
     public const int boneCount = 6;

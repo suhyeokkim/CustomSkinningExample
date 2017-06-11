@@ -64,9 +64,9 @@
             mesh.vertices = vertices;
             mesh.triangles = indices;
 
-            Vector2[] uvs = null;
+            Vector3[] uvs = null;
             UVMapper.GetUV(ref uvs, data.GetUVPoses(), data.GetUVSizes());
-            mesh.uv = uvs;
+            mesh.SetUVs(0, new List<Vector3>(uvs));
 
             Matrix4x4[] bindPoses = null;
             BoneWeight[] weight = null;

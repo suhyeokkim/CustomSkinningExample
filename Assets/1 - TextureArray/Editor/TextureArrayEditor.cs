@@ -27,7 +27,7 @@
 
         public override void OnInspectorGUI()
         {
-            serializedObject.UpdateIfDirtyOrScript();
+            serializedObject.Update();
 
             Texture2DArrayManager manager = targetAs;
 

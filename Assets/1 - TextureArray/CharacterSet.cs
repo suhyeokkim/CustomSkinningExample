@@ -27,7 +27,7 @@
                 (chr) =>
                 {
                     Mesh mesh = null;
-                    int index = Array.FindIndex(texArrayManager.textureInputArray, (tex) => tex.Equals(chr.data.charTexture));
+                    int index = Array.FindIndex(texArrayManager.textureInputArray, (tex) => tex.Equals(chr.data.texture));
 
                     Transform[] boneArray = chr.BuildBone();
 

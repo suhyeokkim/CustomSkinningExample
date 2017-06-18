@@ -1,4 +1,3 @@
-## InstancedSkinning Example
+## VariousSkinning Example
 
-Use DrawMeshInstanced and Textued2DArray
-Batch count increase from Character Kind 
+WIP

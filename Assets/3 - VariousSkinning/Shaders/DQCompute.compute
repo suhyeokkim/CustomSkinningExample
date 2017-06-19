@@ -1,0 +1,14 @@
+﻿#pragma kernel TransfromMesh
+
+StructuredBuffer<float3> vertexReader;
+StructuredBuffer<float3> normalReader;
+StructuredBuffer<float4> boneIndexReader;
+StructuredBuffer<float4> boneWeightReader;
+
+AppendStructuredBuffer<float3> vertexWriter;
+AppendStructuredBuffer<float3> normalWriter;
+
+[numthreads(8,8,8)]
+void TransfromMesh (uint3 vertexID : SV_DispatchThreadID)
+{
+}

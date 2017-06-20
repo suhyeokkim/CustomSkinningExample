@@ -1,0 +1,92 @@
+﻿CGPROGRAM
+
+#pragma kernel TransfromVertex
+
+
+Buffer<float3> bonePositionBuffer;
+Buffer<float4> boneRotationBuffer;
+
+RWBuffer<bool> calculatedMatrix;
+RWStructuredBuffer<float4x4> boneMatrixBuffer;
+
+struct BoneInfoPerVertex
+{
+    float4 weight;
+    uint4 index;
+};
+
+RWBuffer<float3> vertexStream;
+StructuredBuffer<BoneInfoPerVertex> boneInfoBuffer;
+
+cbuffer Config
+{
+    uint vertexCount;
+}
+
+inline float4x4 CalculateMatrix(float3 pos, float4 quat)
+{
+	float4x4 matrixData;
+
+    float   xx = quat.x * quat.x, xy = quat.x * quat.y, xz = quat.x * quat.z, xw = quat.x * quat.w,
+            yy = quat.y * quat.y, yz = quat.y * quat.z, yw = quat.y * quat.w,
+            zz = quat.z * quat.z, zw = quat.z * quat.w;
+    
+    matrixData[0][0] = 1 - 2 * yy - 2 * zz;
+    matrixData[0][1] = 2 * xy - 2 * zw;
+    matrixData[0][2] = 2 * xz + 2 * yw;
+
+    matrixData[1][0] = 2 * xy + 2 * zw;
+    matrixData[1][1] = 1 - 2 * xx - 2 * zz;
+    matrixData[1][2] = 2 * yz - 2 * xw;
+
+    matrixData[2][0] = 2 * xz - 2 * yw;
+    matrixData[2][1] = 2 * yz + 2 * xw;
+    matrixData[2][2] = 1 - 2 * xx - 2 * yy;
+
+    matrixData[0][3] = pos.x;
+    matrixData[1][3] = pos.y;
+    matrixData[2][3] = pos.z;
+    
+    matrixData[3][0] = 0;
+    matrixData[3][1] = 0;
+    matrixData[3][2] = 0;
+    matrixData[3][3] = 1;
+
+	return matrixData;
+}
+
+inline float4x4 GetMatrix(uint boneIndex)
+{
+    if (!calculatedMatrix[boneIndex])
+    {
+        boneMatrixBuffer[boneIndex] = CalculateMatrix(bonePositionBuffer[boneIndex], boneRotationBuffer[boneIndex]);
+        calculatedMatrix[boneIndex] = true;
+        return boneMatrixBuffer[boneIndex];
+    }
+    else
+    {
+        return boneMatrixBuffer[boneIndex];
+    }
+}
+
+#define MAX_THREAD_ID 512
+
+[numthreads(MAX_THREAD_ID, 1, 1)]
+void TransfromVertex(uint3 threadID : SV_DispatchThreadID)
+{
+    for (uint realVertexID = threadID[0]; realVertexID < vertexCount; realVertexID += MAX_THREAD_ID)
+    {
+        float4x4 transformMatrix = GetMatrix(boneInfoBuffer[realVertexID].index[0]) * boneInfoBuffer[realVertexID].weight[0];
+
+        if (boneInfoBuffer[realVertexID].weight[1] > 0)
+            transformMatrix += GetMatrix(boneInfoBuffer[realVertexID].index[1]) * boneInfoBuffer[realVertexID].weight[1];
+        if (boneInfoBuffer[realVertexID].weight[2] > 0)
+            transformMatrix += GetMatrix(boneInfoBuffer[realVertexID].index[2]) * boneInfoBuffer[realVertexID].weight[2];
+        if (boneInfoBuffer[realVertexID].weight[3] > 0)
+            transformMatrix += GetMatrix(boneInfoBuffer[realVertexID].index[3]) * boneInfoBuffer[realVertexID].weight[3];
+
+        vertexStream[realVertexID] = mul(transformMatrix, float4(vertexStream[realVertexID], 1)).xyz;
+    }
+}
+ 
+ENDCG

@@ -78,6 +78,7 @@
 
             public Vector3[] bonePositionArray;
             public Quaternion[] boneRotationArray;
+            public bool[] calculatedArray;
 
             public int kernelIndex;
             public int vertexCount;
@@ -93,6 +94,7 @@
 
                 bonePositionArray = new Vector3[chunk2.bones.Length];
                 boneRotationArray = new Quaternion[chunk2.bones.Length];
+                calculatedArray = new bool[chunk2.bones.Length];
 
                 for (int i = 0; i < chunk2.bones.Length; i++)
                 {
@@ -126,6 +128,8 @@
 
                 computeShader.SetInt("vertexCount", vertexCount);
 
+                computeShader.SetBuffer(kernelIndex, "restPoseMatrixBuffer", boneRestPoseMatrixBuffer);
+
                 computeShader.SetBuffer(kernelIndex, "bonePositionBuffer", bonePositionBuffer);
                 computeShader.SetBuffer(kernelIndex, "boneRotationBuffer", boneRotationBuffer);
 
@@ -145,13 +149,14 @@
                     material.SetPass(i);
                 }
 
-                Graphics.DrawProceduralIndirect(MeshTopology.Triangles, null);
+                Graphics.DrawProceduralIndirect(MeshTopology.Triangles, vertexStream);
             }
 
             public void Update()
             {
                 bonePositionBuffer.SetData(bonePositionArray);
                 boneRotationBuffer.SetData(boneRotationArray);
+                boneCacluatedBuffer.SetData(calculatedArray);
 
                 computeShader.Dispatch(kernelIndex, vertexCount / 512 + 1, 1, 1);
             }

@@ -2,6 +2,7 @@
 
 #pragma kernel TransfromVertex
 
+StructuredBuffer<float4x4> restPoseMatrixBuffer;
 
 Buffer<float3> bonePositionBuffer;
 Buffer<float4> boneRotationBuffer;
@@ -85,7 +86,11 @@ void TransfromVertex(uint3 threadID : SV_DispatchThreadID)
         if (boneInfoBuffer[realVertexID].weight[3] > 0)
             transformMatrix += GetMatrix(boneInfoBuffer[realVertexID].index[3]) * boneInfoBuffer[realVertexID].weight[3];
 
-        vertexStream[realVertexID] = mul(transformMatrix, float4(vertexStream[realVertexID], 1)).xyz;
+        vertexStream[realVertexID] =
+            mul(
+                restPoseMatrixBuffer[realVertexID],
+                mul(transformMatrix, float4(vertexStream[realVertexID], 1))
+            ).xyz;
     }
 }
  

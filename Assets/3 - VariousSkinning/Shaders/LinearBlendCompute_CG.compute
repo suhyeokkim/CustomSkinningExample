@@ -16,6 +16,7 @@ struct BoneInfoPerVertex
     uint4 index;
 };
 
+Buffer<float3> vertexBuffer;
 RWBuffer<float3> vertexStream;
 StructuredBuffer<BoneInfoPerVertex> boneInfoBuffer;
 
@@ -89,7 +90,10 @@ void TransfromVertex(uint3 threadID : SV_DispatchThreadID)
         vertexStream[realVertexID] =
             mul(
                 restPoseMatrixBuffer[realVertexID],
-                mul(transformMatrix, float4(vertexStream[realVertexID], 1))
+                mul(
+					transformMatrix, 
+					float4(vertexBuffer[realVertexID], 1)
+				)
             ).xyz;
     }
 }

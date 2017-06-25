@@ -64,6 +64,9 @@
             public ComputeShader computeShader;
 
             public ComputeBuffer vertexBuffer;
+            public ComputeBuffer indexBuffer;
+            public ComputeBuffer uvBuffer;
+
             public ComputeBuffer vertexStream;
             public ComputeBuffer boneWeightPerVertexBuffer;
 
@@ -105,23 +108,29 @@
                 Mesh mesh = chunk.mesh;
 
                 vertexBuffer = new ComputeBuffer(mesh.vertices.Length, Marshal.SizeOf(typeof(Vector3)));
-                vertexBuffer.GetData(mesh.vertices);
+                vertexBuffer.SetData(mesh.vertices);
 
                 vertexCount = mesh.vertexCount;
+
+                indexBuffer = new ComputeBuffer(mesh.triangles.Length, sizeof(int));
+                indexBuffer.SetData(mesh.triangles);
+
+                uvBuffer = new ComputeBuffer(mesh.uv.Length, Marshal.SizeOf(typeof(Vector2)));
+                uvBuffer.SetData(mesh.uv);
 
                 vertexStream = new ComputeBuffer(mesh.vertices.Length, Marshal.SizeOf(typeof(Vector3)));
 
                 boneWeightPerVertexBuffer = new ComputeBuffer(mesh.boneWeights.Length, Marshal.SizeOf(typeof(BoneWeight)));
-                boneWeightPerVertexBuffer.GetData(mesh.boneWeights);
+                boneWeightPerVertexBuffer.SetData(mesh.boneWeights);
 
                 bonePositionBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(Vector3)));
-                bonePositionBuffer.GetData(bonePositionArray);
+                bonePositionBuffer.SetData(bonePositionArray);
 
                 boneRotationBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(Quaternion)));
-                boneRotationBuffer.GetData(boneRotationArray);
+                boneRotationBuffer.SetData(boneRotationArray);
 
                 boneRestPoseMatrixBuffer = new ComputeBuffer(mesh.bindposes.Length, Marshal.SizeOf(typeof(Matrix4x4)));
-                boneRestPoseMatrixBuffer.GetData(mesh.bindposes);
+                boneRestPoseMatrixBuffer.SetData(mesh.bindposes);
 
                 boneCacluatedBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(bool)));
                 boneTransformMatrixBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(Matrix4x4)));
@@ -137,6 +146,7 @@
                 computeShader.SetBuffer(kernelIndex, "boneMatrixBuffer", boneTransformMatrixBuffer);
 
                 computeShader.SetBuffer(kernelIndex, "vertexBuffer", vertexBuffer);
+
                 computeShader.SetBuffer(kernelIndex, "vertexStream", vertexStream);
                 computeShader.SetBuffer(kernelIndex, "boneInfoBuffer", boneWeightPerVertexBuffer);
             }
@@ -146,14 +156,24 @@
                 for (int i = 0; i < chunk.materials.Length; i++)
                 {
                     Material material = chunk.materials[i];
-                    material.SetPass(i);
-                }
+                    material.SetPass(0);
 
-                Graphics.DrawProceduralIndirect(MeshTopology.Triangles, vertexStream);
+                    material.SetBuffer("vertices", vertexBuffer);
+                    material.SetBuffer("triangles", indexBuffer);
+                    material.SetBuffer("uvs", uvBuffer);
+
+                    Graphics.DrawProcedural(MeshTopology.Triangles, indexBuffer.count);
+                }
             }
 
             public void Update()
             {
+                for (int i = 0; i < bones.Length; i++)
+                {
+                    bonePositionArray[i] = bones[i].position;
+                    boneRotationArray[i] = bones[i].rotation;
+                }
+
                 bonePositionBuffer.SetData(bonePositionArray);
                 boneRotationBuffer.SetData(boneRotationArray);
                 boneCacluatedBuffer.SetData(calculatedArray);

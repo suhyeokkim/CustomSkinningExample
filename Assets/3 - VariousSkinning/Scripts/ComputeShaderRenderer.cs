@@ -148,14 +148,8 @@
     /// </summary>
     public struct DualQuaternion
     {
-        // WIP
-        public Quaternion quaternion1;
-        public Quaternion quaternion2;
-
-        public Matrix4x4 ToMatrix()
-        {
-            return Matrix4x4.identity;
-        }
+        public Quaternion rotation;
+        public Quaternion translate;
     }
 
     /// <summary>
@@ -163,23 +157,24 @@
     /// </summary>
     public static class DQExtension
     {
-        public static DualQuaternion ToDQ(this Matrix4x4 matrix)
-        {
-            // WIP
-            DualQuaternion dq = new DualQuaternion();
-            return dq;
-        }
-
         public static DualQuaternion GetLocalToWorldDQ(this Transform transform)
         {
-            // WIP
             DualQuaternion dq = new DualQuaternion();
+            Vector3 pos = transform.position;
+            Quaternion quat = transform.rotation;
+
+            dq.rotation = quat;
+
+            dq.translate[0] = -0.5f * (pos[0] * quat[1] + pos[1] * quat[2] + pos[2] * quat[3]);
+            dq.translate[1] = 0.5f * (pos[0] * quat[0] + pos[1] * quat[3] - pos[2] * quat[2]);
+            dq.translate[2] = 0.5f * (-pos[0] * quat[3] + pos[1] * quat[0] + pos[2] * quat[1]);
+            dq.translate[3] = 0.5f * (pos[0] * quat[2] - pos[1] * quat[1] + pos[2] * quat[0]);
+
             return dq;
         }
 
         public static DualQuaternion GetWorldToLocalDQ(this Transform transform)
         {
-            // WIP
             DualQuaternion dq = new DualQuaternion();
             return dq;
         }
@@ -223,16 +218,6 @@
         public Transform[] bones;
         public DualQuaternion[] currentPoseDQArray;
 
-        public void ConvertMatrixToDQ(Matrix4x4[] matrixArray, ref DualQuaternion[] dqArray)
-        {
-            if (dqArray == null)
-                dqArray = new DualQuaternion[matrixArray.Length];
-            else if (dqArray.Length != matrixArray.Length)
-                Array.Resize(ref dqArray, matrixArray.Length);
-
-            for (int i = 0; i < dqArray.Length; i++) dqArray[i] = matrixArray[i].ToDQ();
-        }
-
         public DualQuaternionBlendSkinningCompute(RenderChunk chunk, RuntimeRenderChunk runtimeChunk, Func<ComputeBuffer> getMeshDataBuffer, Func<ComputeBuffer> getMeshDataStream)
         {
             computeShader = runtimeChunk.computeShader;
@@ -247,10 +232,8 @@
             boneRestPoseDQBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(DualQuaternion)));
             boneCurrentPoseDQBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(DualQuaternion)));
             boneWeightPerVertexBuffer = new ComputeBuffer(chunk.vertexCount, Marshal.SizeOf(typeof(CustomBoneWeight)));
-
-            ConvertMatrixToDQ(runtimeChunk.restPoseBoneInverseMatrix, ref currentPoseDQArray);
-
-            boneRestPoseDQBuffer.SetData(currentPoseDQArray);
+            
+            boneRestPoseDQBuffer.SetData(runtimeChunk.restPoseBoneInverseDQ);
             boneWeightPerVertexBuffer.SetData(chunk.boneWeights);
 
             computeShader.SetInt("vertexCount", vertexCount);

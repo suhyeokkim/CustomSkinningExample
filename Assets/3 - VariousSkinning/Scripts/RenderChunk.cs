@@ -71,6 +71,8 @@
         public Transform[] bones;
         [NonSerialized]
         public Matrix4x4[] restPoseBoneInverseMatrix;
+        [NonSerialized]
+        public DualQuaternion[] restPoseBoneInverseDQ;
 
         public void SetBoneInverseTransform()
         {
@@ -84,6 +86,11 @@
 
             for (int i = 0; i < restPoseBoneInverseMatrix.Length; i++)
                 restPoseBoneInverseMatrix[i] = bones[i].worldToLocalMatrix;
+
+            restPoseBoneInverseDQ = new DualQuaternion[bones.Length];
+
+            for (int i = 0; i < restPoseBoneInverseDQ.Length; i++)
+                restPoseBoneInverseDQ[i] = bones[i].GetWorldToLocalDQ();
         }
     }
 }

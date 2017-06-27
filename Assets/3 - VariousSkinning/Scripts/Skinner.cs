@@ -8,8 +8,12 @@
 
     public interface IRenderer
     {
-        void Update();
         void OnRenderObject();
+    }
+
+    public interface IUpdate
+    {
+        void Update();
     }
 
     public enum SkinningMethod
@@ -20,12 +24,15 @@
 
     public class Skinner : MonoBehaviour
     {
+        public SkinningMethod skinning;
+
         public SkinnedMeshRenderer skinnedMeshRenderer;
         public RenderChunk chunk;
         public RuntimeRenderChunk chunk2;
         public Material material;
 
-        public IRenderer realRenderer;
+        public IRenderer implRenderer;
+        public IUpdate implCompute;
 
         void Awake()
         {
@@ -35,18 +42,22 @@
 
             if (SystemInfo.supportsComputeShaders)
             {
-                realRenderer = new ComputeShaderRenderer(chunk, chunk2, material);
+                ComputeShaderAdapter adapter = new ComputeShaderAdapter(skinning, chunk, chunk2, material);
+
+                implRenderer = adapter as IRenderer;
+                implCompute = adapter as IUpdate;
             }
         }
 
         private void OnRenderObject()
         {
-            realRenderer.OnRenderObject();
+            implRenderer.OnRenderObject();
         }
 
         private void Update()
         {
-            realRenderer.Update();
+            if (implCompute != null)
+                implCompute.Update();
         }
     }
 }

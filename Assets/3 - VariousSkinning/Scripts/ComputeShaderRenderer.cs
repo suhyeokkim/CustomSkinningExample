@@ -6,18 +6,90 @@
     using System.Runtime.InteropServices;
     using UnityEngine;
 
-    public class ComputeShaderRenderer : IRenderer
+    public static class SkinningComputeFactoray
     {
-        /* 
-         * Mesh 데이터 래핑
-         */
-        public RenderChunk chunk;
+        public static ICompute CreateComputeBy(SkinningMethod method, RenderChunk chunk, RuntimeRenderChunk runtimeChunk, Func<ComputeBuffer> getMeshDataBuffer, Func<ComputeBuffer> getMeshDataStream)
+        {
+            switch (method)
+            {
+                case SkinningMethod.LinearBlend:
+                    return new LinearBlendSkinningCompute(chunk, runtimeChunk, getMeshDataBuffer, getMeshDataStream);
+                case SkinningMethod.DualQuaternion:
+                    return new DualQuaternionBlendSkinningCompute(chunk, runtimeChunk, getMeshDataBuffer, getMeshDataStream);
+                default:
+                    return null;
+            }
+        }
+    }
 
+    /// <summary>
+    /// ComputeShader based skinning adapter
+    /// </summary>
+    public class ComputeShaderAdapter : IUpdate, IRenderer
+    {
+        public SkinningMethod method;
+
+        public ICompute compute;
+        public IRenderer renderer;
+
+        public ComputeBuffer meshDataBuffer;
+        public ComputeBuffer meshDataStream;
+
+        public ComputeShaderAdapter(SkinningMethod method, RenderChunk chunk, RuntimeRenderChunk runtimeChunk, Material material)
+        {
+            this.method = method;
+
+            meshDataBuffer = new ComputeBuffer(chunk.vertexCount, Marshal.SizeOf(typeof(MeshDataInfo)));
+            meshDataBuffer.SetData(chunk.meshData);
+
+            meshDataStream = new ComputeBuffer(chunk.vertexCount, Marshal.SizeOf(typeof(MeshDataInfo)));
+            meshDataStream.SetData(chunk.meshData);
+
+            compute = SkinningComputeFactoray.CreateComputeBy(method, chunk, runtimeChunk, () => { return meshDataBuffer; }, () => { return meshDataStream; });
+            renderer = new ComputeShaderRenderer(chunk, material, () => { return Input.GetKey(KeyCode.Space) ? meshDataBuffer : meshDataStream; });
+        }
+
+        public void Update()
+        {
+            compute.Compute();
+        }
+
+        public void OnRenderObject()
+        {
+            renderer.OnRenderObject();
+        }
+    }
+
+    public interface ICompute
+    {
+        void Compute();
+    }
+
+    /// <summary>
+    /// Compute realtime skinning.
+    /// This class implement LinearBlendSkinning, called LBS.
+    /// 
+    /// This class implementation is depend on ComputeShader.
+    /// if you change computeShader source, Have to change this class implementation.
+    /// </summary>
+    public class LinearBlendSkinningCompute : ICompute
+    {
         /*
-         * 스키닝 데이터 계산 용 데이터
-         * meshDataBuffer 는 참조 용도
-         * 실제로 그릴때 쓰는 데이터는 meshDataStream
+         * boneWeightPerVertexBuffer : source bone index, weight from UnityEngine.Mesh
+         * 
+         * boneCurrentPoseMatrixBuffer : current pose transformation matrix from UnityEngine.Transform
+         * boneRestPoseMatrixBuffer : rest pose inverse transformation matrix from RuntimeRenderChunk.restPoseBoneInverseMatrix
+         * 
+         * getMeshDataBuffer : get data from outside, source vetices, normals, uvs(compatibility for renderer)
+         * getMeshDataStream : get data from outside, converted vertices, normals, uvs(compatibility for renderer)
          */
+        public int vertexCount;
+
+        public uint maxThreadSizeX;
+        public uint maxThreadSizeY;
+        public uint maxThreadSizeZ;
+
+        public int kernelIndex;
         public ComputeShader computeShader;
 
         public ComputeBuffer boneCurrentPoseMatrixBuffer;
@@ -25,69 +97,217 @@
 
         public ComputeBuffer boneWeightPerVertexBuffer;
 
-        public ComputeBuffer meshDataBuffer;
-
         /*
-         * 스키닝 계산용 버퍼 및 캐시
+         * data caching..
          */
         public Transform[] bones;
-        public Matrix4x4[] boneMatrixArray;
+        public Matrix4x4[] currentPoseMatrixArray;
+
+        public LinearBlendSkinningCompute(RenderChunk chunk, RuntimeRenderChunk runtimeChunk, Func<ComputeBuffer> getMeshDataBuffer, Func<ComputeBuffer> getMeshDataStream)
+        {
+            computeShader = runtimeChunk.computeShader;
+            kernelIndex = computeShader.FindKernel("LinearBlendCompute");
+            computeShader.GetKernelThreadGroupSizes(kernelIndex, out maxThreadSizeX, out maxThreadSizeY, out maxThreadSizeZ);
+
+            vertexCount = chunk.vertexCount;
+
+            bones = runtimeChunk.bones;
+            currentPoseMatrixArray = new Matrix4x4[bones.Length];
+
+            boneRestPoseMatrixBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(Matrix4x4)));
+            boneCurrentPoseMatrixBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(Matrix4x4)));
+            boneWeightPerVertexBuffer = new ComputeBuffer(chunk.vertexCount, Marshal.SizeOf(typeof(CustomBoneWeight)));
+
+            boneRestPoseMatrixBuffer.SetData(runtimeChunk.restPoseBoneInverseMatrix);
+            boneWeightPerVertexBuffer.SetData(chunk.boneWeights);
+
+            computeShader.SetInt("vertexCount", vertexCount);
+
+            computeShader.SetBuffer(kernelIndex, "currentPoseMatrixBuffer", boneCurrentPoseMatrixBuffer);
+            computeShader.SetBuffer(kernelIndex, "restPoseMatrixBuffer", boneRestPoseMatrixBuffer);
+
+            computeShader.SetBuffer(kernelIndex, "boneInfoBuffer", boneWeightPerVertexBuffer);
+
+            computeShader.SetBuffer(kernelIndex, "meshBuffer", getMeshDataBuffer());
+            computeShader.SetBuffer(kernelIndex, "meshStream", getMeshDataStream());
+        }
+
+        public void Compute()
+        {
+            for (int i = 0; i < currentPoseMatrixArray.Length; i++)
+                currentPoseMatrixArray[i] = bones[i].localToWorldMatrix;
+
+            boneCurrentPoseMatrixBuffer.SetData(currentPoseMatrixArray);
+
+            computeShader.Dispatch(kernelIndex, (int)(vertexCount / (long)maxThreadSizeX + 1), 1, 1);
+        }
+    }
+
+    /// <summary>
+    /// dual quaternion data class
+    /// </summary>
+    public struct DualQuaternion
+    {
+        // WIP
+        public Quaternion quaternion1;
+        public Quaternion quaternion2;
+
+        public Matrix4x4 ToMatrix()
+        {
+            return Matrix4x4.identity;
+        }
+    }
+
+    /// <summary>
+    /// dual quaternion translation extension 
+    /// </summary>
+    public static class DQExtension
+    {
+        public static DualQuaternion ToDQ(this Matrix4x4 matrix)
+        {
+            // WIP
+            DualQuaternion dq = new DualQuaternion();
+            return dq;
+        }
+
+        public static DualQuaternion GetLocalToWorldDQ(this Transform transform)
+        {
+            // WIP
+            DualQuaternion dq = new DualQuaternion();
+            return dq;
+        }
+
+        public static DualQuaternion GetWorldToLocalDQ(this Transform transform)
+        {
+            // WIP
+            DualQuaternion dq = new DualQuaternion();
+            return dq;
+        }
+    }
+
+    /// <summary>
+    /// Compute realtime skinning.
+    /// This class will implement DualQuaternionBlendSkinning, called DQS, DQBS.
+    /// 
+    /// This class implementation is depend on ComputeShader.
+    /// if you change computeShader source, Have to change this class implementation.
+    /// </summary>
+    public class DualQuaternionBlendSkinningCompute : ICompute
+    {
+        /*
+         * boneWeightPerVertexBuffer : source bone index, weight from UnityEngine.Mesh
+         * 
+         * boneCurrentPoseMatrixBuffer : current pose transformation matrix from UnityEngine.Transform
+         * boneRestPoseMatrixBuffer : rest pose inverse transformation matrix from RuntimeRenderChunk.restPoseBoneInverseMatrix
+         * 
+         * getMeshDataBuffer : get data from outside, source vetices, normals, uvs(compatibility for renderer)
+         * getMeshDataStream : get data from outside, converted vertices, normals, uvs(compatibility for renderer)
+         */
+        public int vertexCount;
+
+        public uint maxThreadSizeX;
+        public uint maxThreadSizeY;
+        public uint maxThreadSizeZ;
+
+        public int kernelIndex;
+        public ComputeShader computeShader;
+
+        public ComputeBuffer boneCurrentPoseDQBuffer;
+        public ComputeBuffer boneRestPoseDQBuffer;
+
+        public ComputeBuffer boneWeightPerVertexBuffer;
 
         /*
-         * 쉐이더에서 그릴때 쓰는 데이터들
-         * 인덱스 버퍼, 서브메쉬 구별용 인덱스 범위 데이터 버퍼(텍스쳐 인덱스)
+         * data caching..
+         */
+        public Transform[] bones;
+        public DualQuaternion[] currentPoseDQArray;
+
+        public void ConvertMatrixToDQ(Matrix4x4[] matrixArray, ref DualQuaternion[] dqArray)
+        {
+            if (dqArray == null)
+                dqArray = new DualQuaternion[matrixArray.Length];
+            else if (dqArray.Length != matrixArray.Length)
+                Array.Resize(ref dqArray, matrixArray.Length);
+
+            for (int i = 0; i < dqArray.Length; i++) dqArray[i] = matrixArray[i].ToDQ();
+        }
+
+        public DualQuaternionBlendSkinningCompute(RenderChunk chunk, RuntimeRenderChunk runtimeChunk, Func<ComputeBuffer> getMeshDataBuffer, Func<ComputeBuffer> getMeshDataStream)
+        {
+            computeShader = runtimeChunk.computeShader;
+            kernelIndex = computeShader.FindKernel("DualQuaternionBlendCompute");
+            computeShader.GetKernelThreadGroupSizes(kernelIndex, out maxThreadSizeX, out maxThreadSizeY, out maxThreadSizeZ);
+
+            vertexCount = chunk.vertexCount;
+
+            bones = runtimeChunk.bones;
+            currentPoseDQArray = new DualQuaternion[bones.Length];
+
+            boneRestPoseDQBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(DualQuaternion)));
+            boneCurrentPoseDQBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(DualQuaternion)));
+            boneWeightPerVertexBuffer = new ComputeBuffer(chunk.vertexCount, Marshal.SizeOf(typeof(CustomBoneWeight)));
+
+            ConvertMatrixToDQ(runtimeChunk.restPoseBoneInverseMatrix, ref currentPoseDQArray);
+
+            boneRestPoseDQBuffer.SetData(currentPoseDQArray);
+            boneWeightPerVertexBuffer.SetData(chunk.boneWeights);
+
+            computeShader.SetInt("vertexCount", vertexCount);
+
+            computeShader.SetBuffer(kernelIndex, "currentPoseDQBuffer", boneCurrentPoseDQBuffer);
+            computeShader.SetBuffer(kernelIndex, "restPoseMatrixBuffer", boneRestPoseDQBuffer);
+            computeShader.SetBuffer(kernelIndex, "boneInfoBuffer", boneWeightPerVertexBuffer);
+
+            computeShader.SetBuffer(kernelIndex, "meshBuffer", getMeshDataBuffer());
+            computeShader.SetBuffer(kernelIndex, "meshStream", getMeshDataStream());
+        }
+
+        public void Compute()
+        {
+            for (int i = 0; i < currentPoseDQArray.Length; i++)
+            {
+                currentPoseDQArray[i] = bones[i].GetLocalToWorldDQ();
+            }
+            
+            boneCurrentPoseDQBuffer.SetData(currentPoseDQArray);
+
+            computeShader.Dispatch(kernelIndex, (int)(vertexCount / (long)maxThreadSizeX + 1), 1, 1);
+        }
+    }
+
+    /// <summary>
+    /// Render skinned data
+    /// 
+    /// This class implementation is depend on shader which noticed material.
+    /// if you change shader source, Have to change this class implementation.
+    /// </summary>
+    public class ComputeShaderRenderer : IRenderer
+    {
+        /*
+         * indexBuffer : Index Buffer from UnityEngine.Mesh
+         * indexCountBuffer : end index which is each SubMesh in indexArray for texture index(Texture2DArray)
+         * 
+         * getMeshDataStream : get data from outside, converted vertices, normals, uvs
          */
         public Material material;
 
         public ComputeBuffer indexBuffer;
         public ComputeBuffer indexCountBuffer;
 
-        /*
-         * Skinning 연산 -> 그릴 때 참조하는 mesh data
-         */
-        public ComputeBuffer meshDataStream;
+        public Func<ComputeBuffer> getMeshDataStream;
 
-        public int kernelIndex;
-
-        public ComputeShaderRenderer(RenderChunk chunk, RuntimeRenderChunk chunk2, Material material)
+        public ComputeShaderRenderer(RenderChunk chunk, Material material, Func<ComputeBuffer> getMeshDataStream)
         {
-            this.chunk = chunk;
             this.material = material;
 
-            computeShader = chunk2.computeShader;
-            kernelIndex = computeShader.FindKernel("TransfromVertex");
-
-            bones = chunk2.bones;
-            boneMatrixArray = new Matrix4x4[bones.Length];
-
-            boneWeightPerVertexBuffer = new ComputeBuffer(chunk.vertexCount, Marshal.SizeOf(typeof(BoneWeight)));
-            boneWeightPerVertexBuffer.SetData(chunk.boneWeights);
-
-            boneRestPoseMatrixBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(Matrix4x4)));
-            boneRestPoseMatrixBuffer.SetData(chunk2.restPoseBoneInverseMatrix);
-
-            boneCurrentPoseMatrixBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(Matrix4x4)));
-
-            meshDataBuffer = new ComputeBuffer(chunk.vertexCount, Marshal.SizeOf(typeof(MeshDataInfo)));
-            meshDataBuffer.SetData(chunk.meshData);
-
             indexBuffer = new ComputeBuffer(chunk.indices.Length, sizeof(int));
-            indexBuffer.SetData(chunk.indices);
-
             indexCountBuffer = new ComputeBuffer(chunk.indexCounts.Length, sizeof(int));
+
+            indexBuffer.SetData(chunk.indices);
             indexCountBuffer.SetData(chunk.indexCounts);
 
-            meshDataStream = new ComputeBuffer(chunk.vertexCount, Marshal.SizeOf(typeof(MeshDataInfo)));
-
-            computeShader.SetInt("vertexCount", chunk.vertexCount);
-
-            computeShader.SetBuffer(kernelIndex, "currentPoseMatrixBuffer", boneCurrentPoseMatrixBuffer);
-            computeShader.SetBuffer(kernelIndex, "restPoseMatrixBuffer", boneRestPoseMatrixBuffer);
-
-            computeShader.SetBuffer(kernelIndex, "meshBuffer", meshDataBuffer);
-            computeShader.SetBuffer(kernelIndex, "boneInfoBuffer", boneWeightPerVertexBuffer);
-
-            computeShader.SetBuffer(kernelIndex, "meshStream", meshDataStream);
+            this.getMeshDataStream = getMeshDataStream;
         }
 
         public void OnRenderObject()
@@ -96,19 +316,9 @@
 
             material.SetBuffer("triangles", indexBuffer);
             material.SetBuffer("triCountPerTextureIndex", indexCountBuffer);
-            material.SetBuffer("vertices", meshDataStream);
+            material.SetBuffer("vertices", getMeshDataStream());
 
             Graphics.DrawProcedural(MeshTopology.Triangles, indexBuffer.count);
-        }
-
-        public void Update()
-        {
-            for (int i = 0; i < boneMatrixArray.Length; i++)
-                boneMatrixArray[i] = bones[i].localToWorldMatrix;
-
-            boneCurrentPoseMatrixBuffer.SetData(boneMatrixArray);
-
-            computeShader.Dispatch(kernelIndex, chunk.vertexCount / 512 + 1, 1, 1);
         }
     }
 }

@@ -1,0 +1,221 @@
+﻿CGPROGRAM
+
+#pragma kernel LinearBlendCompute
+#pragma kernel DualQuaternionBlendCompute
+/*
+ *  LinearBlendSkinning Data
+ */
+StructuredBuffer<float4x4> currentPoseMatrixBuffer;
+StructuredBuffer<float4x4> restPoseMatrixBuffer;
+
+/*
+ *  per-vertex data layout
+ */
+struct VertexInfo
+{
+    float4 position;
+    float4 normal;
+    float2 uv;
+};
+
+/*
+ *  bone-info data layout
+ */
+struct BoneInfoPerVertex
+{
+    float4 weight;
+    int4 index;
+};
+
+/*
+ *  Mesh source and bone weights and index
+ */
+StructuredBuffer<VertexInfo> meshBuffer;
+StructuredBuffer<BoneInfoPerVertex> boneInfoBuffer;
+
+/*
+ *  Converted mesh data;
+ */
+RWStructuredBuffer<VertexInfo> meshStream;
+
+cbuffer Config
+{
+    uint vertexCount;
+}
+
+inline float4x4 GetCurrentPoseMatrix(int boneIndex)
+{
+    return currentPoseMatrixBuffer[boneIndex];
+}
+
+inline float4x4 GetRestPoseMatrix(int boneIndex)
+{
+    return restPoseMatrixBuffer[boneIndex];
+}
+
+#define MAX_THREAD_ID 512
+
+[numthreads(MAX_THREAD_ID, 1, 1)]
+void LinearBlendCompute(uint3 threadID : SV_DispatchThreadID)
+{
+    for (uint realVertexID = threadID[0]; realVertexID < vertexCount; realVertexID += MAX_THREAD_ID)
+    {
+        float4x4 
+            transformMatrix = GetCurrentPoseMatrix(boneInfoBuffer[realVertexID].index[0]) * boneInfoBuffer[realVertexID].weight[0],
+            restPoseTransformMatrix = GetRestPoseMatrix(boneInfoBuffer[realVertexID].index[0]) * boneInfoBuffer[realVertexID].weight[0];
+
+        if (boneInfoBuffer[realVertexID].weight[1] > 0)
+        {
+            transformMatrix += GetCurrentPoseMatrix(boneInfoBuffer[realVertexID].index[1]) * boneInfoBuffer[realVertexID].weight[1];
+            restPoseTransformMatrix += GetRestPoseMatrix(boneInfoBuffer[realVertexID].index[1]) * boneInfoBuffer[realVertexID].weight[1];
+        }
+            
+        if (boneInfoBuffer[realVertexID].weight[2] > 0)
+        {
+            transformMatrix += GetCurrentPoseMatrix(boneInfoBuffer[realVertexID].index[2]) * boneInfoBuffer[realVertexID].weight[2];
+            restPoseTransformMatrix += GetRestPoseMatrix(boneInfoBuffer[realVertexID].index[2]) * boneInfoBuffer[realVertexID].weight[2];
+        }
+        
+        if (boneInfoBuffer[realVertexID].weight[3] > 0)
+        {
+            transformMatrix += GetCurrentPoseMatrix(boneInfoBuffer[realVertexID].index[3]) * boneInfoBuffer[realVertexID].weight[3];
+            restPoseTransformMatrix += GetRestPoseMatrix(boneInfoBuffer[realVertexID].index[3]) * boneInfoBuffer[realVertexID].weight[3];
+        }
+        
+        transformMatrix = mul(transformMatrix, restPoseTransformMatrix);
+
+        meshStream[realVertexID].position =
+                                        mul(
+					                        transformMatrix,
+					                        float4(meshBuffer[realVertexID].position.xyz, 1)
+				                        );
+        meshStream[realVertexID].normal =
+                                        mul(
+					                        transformMatrix,
+					                        float4(meshBuffer[realVertexID].normal.xyz, 1)
+				                        );
+        meshStream[realVertexID].uv = meshBuffer[realVertexID].uv;
+    }
+}
+
+StructuredBuffer<float2x4> currentPoseDQBuffer;
+StructuredBuffer<float2x4> restPoseDQBuffer;
+
+inline float2x4 GetCurrentPoseDQ(int boneIndex)
+{
+    return currentPoseDQBuffer[boneIndex];
+}
+
+inline float2x4 GetRestPoseDQ(int boneIndex)
+{
+    return restPoseDQBuffer[boneIndex];
+}
+
+inline float2x4 mulDQ(float2x4 dq1, float2x4 dq2)
+{
+    // WIP
+    float2x4 dq;
+    
+    dq[0][0] = 0;
+    dq[0][1] = 0;
+    dq[0][2] = 0;
+    dq[0][3] = 1;
+    
+    dq[1][0] = 0;
+    dq[1][1] = 0;
+    dq[1][2] = 0;
+    dq[1][3] = 1;
+
+    return dq;
+}
+
+inline float4 transformPositionByDQ(float2x4 dq, float4 pos)
+{
+    // WIP
+    dq[0][0] = 0;
+    dq[0][1] = 0;
+    dq[0][2] = 0;
+    dq[0][3] = 1;
+    
+    dq[1][0] = 0;
+    dq[1][1] = 0;
+    dq[1][2] = 0;
+    dq[1][3] = 1;
+
+    return pos;
+}
+
+[numthreads(MAX_THREAD_ID, 1, 1)]
+void DualQuaternionBlendCompute(uint3 threadID : SV_DispatchThreadID)
+{
+    for (uint realVertexID = threadID[0]; realVertexID < vertexCount; realVertexID += MAX_THREAD_ID)
+    {
+        float2x4 
+            transformDQ = GetCurrentPoseDQ(boneInfoBuffer[realVertexID].index[0]) * boneInfoBuffer[realVertexID].weight[0],        
+            restPoseDQ = GetRestPoseDQ(boneInfoBuffer[realVertexID].index[0]) * boneInfoBuffer[realVertexID].weight[0];
+
+        if (boneInfoBuffer[realVertexID].weight[1] > 0)
+        {
+            transformDQ += GetCurrentPoseDQ(boneInfoBuffer[realVertexID].index[1]) * boneInfoBuffer[realVertexID].weight[1];
+            restPoseDQ += GetRestPoseDQ(boneInfoBuffer[realVertexID].index[1]) * boneInfoBuffer[realVertexID].weight[1];
+        }
+            
+        if (boneInfoBuffer[realVertexID].weight[2] > 0)
+        {
+            transformDQ += GetCurrentPoseDQ(boneInfoBuffer[realVertexID].index[2]) * boneInfoBuffer[realVertexID].weight[2];
+            restPoseDQ += GetRestPoseDQ(boneInfoBuffer[realVertexID].index[2]) * boneInfoBuffer[realVertexID].weight[2];
+        }
+        
+        if (boneInfoBuffer[realVertexID].weight[3] > 0)
+        {
+            transformDQ += GetCurrentPoseDQ(boneInfoBuffer[realVertexID].index[3]) * boneInfoBuffer[realVertexID].weight[3];
+            restPoseDQ += GetRestPoseDQ(boneInfoBuffer[realVertexID].index[3]) * boneInfoBuffer[realVertexID].weight[3];
+        }
+        
+        transformDQ = mulDQ(transformDQ, restPoseDQ);
+
+        meshStream[realVertexID].position = transformPositionByDQ(
+					                            transformDQ,
+					                            float4(meshBuffer[realVertexID].position.xyz, 1)
+				                            );
+        meshStream[realVertexID].normal =   transformPositionByDQ(
+					                            transformDQ,
+					                            float4(meshBuffer[realVertexID].normal.xyz, 1)
+				                            );
+        meshStream[realVertexID].uv = meshBuffer[realVertexID].uv;
+    }
+}
+ 
+ENDCG
+
+//inline float4x4 CalculateMatrix(float3 pos, float4 quat)
+//{
+//    float4x4 matrixData;
+
+//    float xx = quat.x * quat.x, xy = quat.x * quat.y, xz = quat.x * quat.z, xw = quat.x * quat.w,
+//            yy = quat.y * quat.y, yz = quat.y * quat.z, yw = quat.y * quat.w,
+//            zz = quat.z * quat.z, zw = quat.z * quat.w;
+    
+//    matrixData[0][0] = 1 - 2 * yy - 2 * zz;
+//    matrixData[0][1] = 2 * xy - 2 * zw;
+//    matrixData[0][2] = 2 * xz + 2 * yw;
+
+//    matrixData[1][0] = 2 * xy + 2 * zw;
+//    matrixData[1][1] = 1 - 2 * xx - 2 * zz;
+//    matrixData[1][2] = 2 * yz - 2 * xw;
+
+//    matrixData[2][0] = 2 * xz - 2 * yw;
+//    matrixData[2][1] = 2 * yz + 2 * xw;
+//    matrixData[2][2] = 1 - 2 * xx - 2 * yy;
+
+//    matrixData[0][3] = pos.x;
+//    matrixData[1][3] = pos.y;
+//    matrixData[2][3] = pos.z;
+    
+//    matrixData[3][0] = 0;
+//    matrixData[3][1] = 0;
+//    matrixData[3][2] = 0;
+//    matrixData[3][3] = 1;
+
+//    return matrixData;
+//}

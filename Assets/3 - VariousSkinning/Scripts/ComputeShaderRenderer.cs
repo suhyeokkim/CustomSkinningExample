@@ -4,6 +4,7 @@
     using System.Collections;
     using System.Collections.Generic;
     using System.Runtime.InteropServices;
+    using System.Text;
     using UnityEngine;
 
     public static class SkinningComputeFactoray
@@ -154,15 +155,64 @@
         }
     }
 
+    public static class Matrix4x4Extension
+    {
+        public static void Multiply(this Matrix4x4 matrix, float scalar)
+        {
+            for (int i = 0; i < 16; i++)
+                matrix[i] *= scalar;
+        }
+
+        public static Vector3 ToTranslate(this Matrix4x4 matrix)
+        {
+            return new Vector3(matrix[0, 3], matrix[1, 3], matrix[2, 3]);
+        }
+
+        public static Quaternion ToRotation(this Matrix4x4 matrix)
+        {
+            Quaternion q = new Quaternion();
+            q.w = Mathf.Sqrt(1.0f + matrix.m00 + matrix.m11 + matrix.m22) / 2.0f;
+            float w4 = (4.0f * q.w);
+            q.x = (matrix.m21 - matrix.m12) / w4;
+            q.y = (matrix.m02 - matrix.m20) / w4;
+            q.z = (matrix.m10 - matrix.m01) / w4;
+
+            return q;
+        }
+
+        public static DualQuaternion ToDQ(this Matrix4x4 matrix)
+        {
+            DualQuaternion dq = DualQuaternion.identity;
+            return new DualQuaternion(matrix.ToRotation(), matrix.ToTranslate());
+        }
+    }
+
     public static class QuaternionExtension
     {
         public static Quaternion AddQuaternion(Quaternion q1, Quaternion q2)
         {
             return new Quaternion(q1.x + q2.x, q1.y + q2.y, q1.z + q2.z, q1.w + q2.w);
         }
-        public static Quaternion Multiply(Quaternion q, float f)
+
+        public static Quaternion Normalize(Quaternion q)
         {
-            return new Quaternion(q.x * f, q.y * f, q.z * f, q.w * f);
+            float len = Mathf.Sqrt(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w);
+
+            q.x /= len;
+            q.y /= len;
+            q.z /= len;
+            q.w /= len;
+
+            return q;
+        }
+
+        public static Quaternion Multiply(this Quaternion q, float s)
+        {
+            q.x *= s;
+            q.y *= s;
+            q.z *= s;
+            q.w *= s;
+            return q;
         }
     }
 
@@ -185,19 +235,98 @@
         public DualQuaternion(Quaternion rotation, Vector3 position)
         {
             real = rotation;
+            dual = new Quaternion(position.x, position.y, position.z, 0) * rotation;
 
-            dual = (rotation * new Quaternion(position.x * 0.5f, position.y * 0.5f, position.z * 0.5f, 0));
+            dual.x = dual.x / 2f;
+            dual.y = dual.y / 2f;
+            dual.z = dual.z / 2f;
+            dual.w = dual.w / 2f;
         }
-            
+
+        public Quaternion rotation { get { return real; } }
+        public Vector3 translate
+        {
+            get
+            {
+                Quaternion t = new Quaternion(dual.x * 2f, dual.y * 2f, dual.z * 2f, dual.w * 2f) * (Quaternion.Inverse(real));
+                return new Vector3(t.x, t.y, t.z);
+            }
+        }
+        public DualQuaternion inverse { get { return Inverse(this); } }
+
+        public static DualQuaternion Inverse(DualQuaternion dq)
+        {
+            return new DualQuaternion(Quaternion.Inverse(dq.real), Quaternion.Inverse(dq.dual));
+        }
+
+        public Matrix4x4 ToMatrix()
+        {
+            Matrix4x4 matrix = Matrix4x4.identity;
+            float
+                xx = real.x * real.x, xy = real.x * real.y, xz = real.x * real.z, xw = real.x * real.w,
+                yy = real.y * real.y, yz = real.y * real.z, yw = real.y * real.w,
+                zz = real.z * real.z, zw = real.z * real.w;
+
+            matrix[0, 0] = 1 - 2 * yy - 2 * zz;
+            matrix[0, 1] = 2 * xy - 2 * zw;
+            matrix[0, 2] = 2 * xz + 2 * yw;
+
+            matrix[1, 0] = 2 * xy + 2 * zw;
+            matrix[1, 1] = 1 - 2 * xx - 2 * zz;
+            matrix[1, 2] = 2 * yz - 2 * xw;
+
+            matrix[2, 0] = 2 * xz - 2 * yw;
+            matrix[2, 1] = 2 * yz + 2 * xw;
+            matrix[2, 2] = 1 - 2 * xx - 2 * yy;
+
+            Vector3 trans = translate;
+
+            matrix[0, 3] = trans.x;
+            matrix[1, 3] = trans.y;
+            matrix[2, 3] = trans.z;
+
+            matrix[3, 0] = 0;
+            matrix[3, 1] = 0;
+            matrix[3, 2] = 0;
+            matrix[3, 3] = 1;
+
+            return matrix;
+        }
+                  
         public static DualQuaternion operator *(DualQuaternion dq1, DualQuaternion dq2)
         {
-            // WIP
-            return new DualQuaternion(dq1.real * dq2.real, QuaternionExtension.AddQuaternion(dq1.real * dq2.dual, dq1.dual * dq2.real));
+            return new DualQuaternion(dq1.real * dq2.real, (QuaternionExtension.AddQuaternion(dq1.dual * dq2.real, dq1.real * dq2.dual)));
         }
 
         public static Vector3 operator *(DualQuaternion dq, Vector3 pos)
         {
-            Quaternion t = Quaternion.Inverse(dq.real) * new Quaternion(dq.dual.x * 2f, dq.dual.y * 2f, dq.dual.z * 2f, dq.dual.w * 2f);            return dq.real * pos + new Vector3(t.x, t.y, t.z);
+            return dq.real * pos + dq.translate;
+        }
+
+        public static bool operator ==(DualQuaternion dq1, DualQuaternion dq2)
+        {
+            return dq1.real.Equals(dq2.real) && dq1.dual.Equals(dq2.dual);
+        }
+
+        public static bool operator !=(DualQuaternion dq1, DualQuaternion dq2)
+        {
+            return !dq1.real.Equals(dq2.real) || !dq1.dual.Equals(dq2.dual);
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is DualQuaternion)
+            {
+                DualQuaternion dq = (DualQuaternion)obj;
+                return dq == this;
+            }
+            else
+                return false;
+        }
+
+        public override int GetHashCode()
+        {
+            return base.GetHashCode();
         }
     }
 
@@ -206,52 +335,17 @@
     /// </summary>
     public static class DQExtension
     {
-        // WIP
         public static DualQuaternion GetLocalToWorldDQ(this Transform transform)
         {
-            DualQuaternion realDQ = new DualQuaternion();
-            Transform iterate = transform;
-
-            while (transform != null)
-            {
-                Vector3 pos = transform.localPosition;
-                Quaternion quat = transform.localRotation;
-
-                DualQuaternion dq = new DualQuaternion(quat, pos);
-
-                if (transform == iterate)
-                    realDQ = dq;
-                else
-                    realDQ = dq * realDQ;
-
-                transform = transform.parent;
-            }
-
-            return realDQ;
+            if(transform.parent != null)
+                return GetLocalToWorldDQ(transform.parent) * new DualQuaternion(transform.localRotation, transform.localPosition);
+            else
+                return new DualQuaternion(transform.localRotation, transform.localPosition);
         }
-
-        // WIP
+        
         public static DualQuaternion GetWorldToLocalDQ(this Transform transform)
         {
-            DualQuaternion realDQ = new DualQuaternion();
-            Transform iterate = transform;
-
-            while (transform != null)
-            {
-                Vector3 pos = transform.localPosition * -1;
-                Quaternion quat = Quaternion.Inverse(transform.localRotation);
-
-                DualQuaternion dq = new DualQuaternion(quat, pos);
-
-                if (transform == iterate)
-                    realDQ = dq;
-                else
-                    realDQ = realDQ * dq;
-
-                transform = transform.parent;
-            }
-
-            return realDQ;
+            return transform.GetLocalToWorldDQ().inverse;
         }
     }
 
@@ -291,9 +385,17 @@
          */
         public Transform[] bones;
         public DualQuaternion[] currentPoseDQArray;
+        public DualQuaternion[] dqArray;
+
+        public Matrix4x4[] matrixArray;
+        public Matrix4x4[] restMatrixArray;
 
         public DualQuaternionBlendSkinningCompute(RenderChunk chunk, RuntimeRenderChunk runtimeChunk, Func<ComputeBuffer> getMeshDataBuffer, Func<ComputeBuffer> getMeshDataStream)
         {
+            matrixArray = new Matrix4x4[runtimeChunk.bones.Length]; 
+            restMatrixArray = runtimeChunk.restPoseBoneInverseMatrix;
+            dqArray = runtimeChunk.restPoseBoneInverseDQ;
+
             computeShader = runtimeChunk.computeShader;
             kernelIndex = computeShader.FindKernel("DualQuaternionBlendCompute");
             computeShader.GetKernelThreadGroupSizes(kernelIndex, out maxThreadSizeX, out maxThreadSizeY, out maxThreadSizeZ);
@@ -325,9 +427,20 @@
         {
             for (int i = 0; i < currentPoseDQArray.Length; i++)
             {
+                matrixArray[i] = bones[i].localToWorldMatrix;
                 currentPoseDQArray[i] = bones[i].GetLocalToWorldDQ();
             }
-            
+
+            for (int i = 0; i < bones.Length; i++)
+            {
+                Vector3 matCon = (restMatrixArray[i] * matrixArray[i]).MultiplyPoint(bones[i].transform.position),
+                        dqCon = (dqArray[i] * currentPoseDQArray[i]) * bones[i].transform.position;
+                if (matCon != (dqCon))
+                {
+                    Debug.Log(i + ":" + matCon.ToString("F4") + "," + dqCon.ToString("F4"));
+                }
+            }
+
             boneCurrentPoseDQBuffer.SetData(currentPoseDQArray);
 
             computeShader.Dispatch(kernelIndex, (int)(vertexCount / (long)maxThreadSizeX + 1), 1, 1);

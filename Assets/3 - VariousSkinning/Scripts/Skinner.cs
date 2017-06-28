@@ -43,20 +43,31 @@
                 implUpdate = adapter as IUpdate;
             }
 
-            DualQuaternion dq1 = new DualQuaternion(Quaternion.AngleAxis(90, Vector3.up), new Vector3(0f, 0.5f, 0f)),
-                            dq2 = new DualQuaternion(Quaternion.AngleAxis(60, Vector3.up), new Vector3(0.5f, 0f, 0f)),
-                            dq3 = new DualQuaternion(Quaternion.AngleAxis(90, Vector3.up), new Vector3(0f, 0f, -0.5f));
+            //DualQuaternion dq1 = new DualQuaternion(Quaternion.AngleAxis(90, Vector3.up), new Vector3(0f, 0.5f, 0f)),
+            //                dq2 = new DualQuaternion(Quaternion.AngleAxis(90, Vector3.up), new Vector3(0.5f, 0f, 0f)),
+            //                dq3 = new DualQuaternion(Quaternion.AngleAxis(90, Vector3.up), new Vector3(0f, 0f, -0.5f));
 
-            Matrix4x4 mat1 = Matrix4x4.TRS(new Vector3(0f, 0.5f, 0f), Quaternion.AngleAxis(90, Vector3.up), Vector3.one),
-                mat2 = Matrix4x4.TRS(new Vector3(0.5f, 0f, 0f), Quaternion.AngleAxis(60, Vector3.up), Vector3.one),
-                mat3 = Matrix4x4.TRS(new Vector3(0f, 0f, -0.5f), Quaternion.AngleAxis(90, Vector3.up), Vector3.one);
+            //Matrix4x4 mat1 = Matrix4x4.TRS(new Vector3(0f, 0.5f, 0f), Quaternion.AngleAxis(90, Vector3.up), Vector3.one),
+            //    mat2 = Matrix4x4.TRS(new Vector3(0.5f, 0f, 0f), Quaternion.AngleAxis(90, Vector3.up), Vector3.one),
+            //    mat3 = Matrix4x4.TRS(new Vector3(0f, 0f, -0.5f), Quaternion.AngleAxis(90, Vector3.up), Vector3.one);
+             
+            //Debug.Log((mat1 * mat2).ToString());
+            //Debug.Log((dq1 * dq2).ToMatrix().ToString());
 
-            // DQ 곱하기 연산에 문제
-            // DQ 변환 연산도 문제
+            //Debug.Log((mat1 * mat2).ToDQ().ToString());
+            //Debug.Log((dq1 * dq2).ToString());
 
-            Debug.Log("separated dq : " + (dq1 * Vector3.one).ToString("F4") + ", " + (dq1 * (dq2 * Vector3.one)).ToString("F4") + ", " + (dq1 * (dq2 * (dq3 * Vector3.one))).ToString("F4"));
-            Debug.Log("combined dq : " + (dq1 * Vector3.one).ToString("F4") + ", " + (dq1 * dq2 * Vector3.one).ToString("F4") + ", " + (dq1 * dq2 * dq3 * Vector3.one).ToString("F4"));
-            Debug.Log("point mat : " + (mat1.MultiplyPoint(Vector3.one)).ToString("F4") + ", " + ((mat1 * mat2).MultiplyPoint(Vector3.one)).ToString("F4") + ", " + ((mat1 * mat2 * mat3).MultiplyPoint(Vector3.one)).ToString("F4"));
+            //Debug.Log((mat1 * mat2 * mat3).ToString());
+            //Debug.Log((dq1 * dq2 * dq3).ToMatrix().ToString());
+
+            //Debug.Log((mat1 * mat2 * mat3).ToDQ().ToString());
+            //Debug.Log((dq1 * dq2 * dq3).ToString());
+
+            //// DQ 곱하기 연산에 문제
+            //Debug.Log("separated dq : " + (dq1 * Vector3.one).ToString("F4") + ", " + (dq1 * (dq2 * Vector3.one)).ToString("F4") + ", " + (dq1 * (dq2 * (dq3 * Vector3.one))).ToString("F4"));
+            //Debug.Log("combined dq : " + (dq1 * Vector3.one).ToString("F4") + ", " + (dq1 * dq2 * Vector3.one).ToString("F4") + ", " + (dq1 * dq2 * dq3 * Vector3.one).ToString("F4"));
+            //Debug.Log("point mat : " + (mat1.MultiplyPoint(Vector3.one)).ToString("F4") + ", " + ((mat1 * mat2).MultiplyPoint(Vector3.one)).ToString("F4") + ", " + ((mat1 * mat2 * mat3).MultiplyPoint(Vector3.one)).ToString("F4"));
+            //Debug.Log("converted mat : " + (dq1.ToMatrix().MultiplyPoint(Vector3.one)).ToString("F4") + ", " + ((dq1 * dq2).ToMatrix().MultiplyPoint(Vector3.one)).ToString("F4") + ", " + ((dq1 * dq2 * dq3).ToMatrix().MultiplyPoint(Vector3.one)).ToString("F4"));
         }
 
         private void OnRenderObject()

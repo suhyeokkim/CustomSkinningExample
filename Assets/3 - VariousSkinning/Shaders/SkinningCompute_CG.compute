@@ -102,54 +102,19 @@ void LinearBlendCompute(uint3 threadID : SV_DispatchThreadID)
     }
 }
 
-StructuredBuffer<float2x4> currentPoseDQBuffer;
-StructuredBuffer<float2x4> restPoseDQBuffer;
+#include <DualQuaternion.cginc>
 
-inline float2x4 GetCurrentPoseDQ(int boneIndex)
+StructuredBuffer<DQ> currentPoseDQBuffer;
+StructuredBuffer<DQ> restPoseDQBuffer;
+
+inline DQ GetCurrentPoseDQ(int boneIndex)
 {
     return currentPoseDQBuffer[boneIndex];
 }
 
-inline float2x4 GetRestPoseDQ(int boneIndex)
+inline DQ GetRestPoseDQ(int boneIndex)
 {
     return restPoseDQBuffer[boneIndex];
-}
-
-inline float4 conjugateQuaternion(float4 quat)
-{
-    return float4(quat.xyz * -1, quat.w);
-}
-
-inline float4 mulQ(float4 q1, float4 q2)
-{
-    return float4(
-                    q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y, 
-                    q1.w * q2.y - q1.x * q2.z + q1.y * q2.w + q1.z * q2.x, 
-                    q1.w * q2.z - q1.x * q2.y - q1.y * q2.x + q1.z * q2.w,
-                    q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z
-                );
-}
-
-inline float2x4 mulDQ(float2x4 dq1, float2x4 dq2)
-{
-    float2x4 dq;
-    
-    dq[0] = mulQ(dq1[0], dq2[0]);
-    dq[1] = mulQ(dq1[0], dq2[1]) + mulQ(dq1[1], dq2[0]);
-    
-    return dq;
-}
-
-inline float3 transformPositionByQ(float4 q1, float3 pos)
-{
-    float4 pos4 = float4(pos, 0);
-
-    return mulQ(mulQ(q1, pos4), conjugateQuaternion(q1)).xyz;
-}
-
-inline float3 transformPositionByDQ(float2x4 dq, float3 pos)
-{ 
-    return transformPositionByQ(dq[0], pos).xyz + mulQ(conjugateQuaternion(dq[0]), dq[1] * 2).xyz;
 }
 
 [numthreads(MAX_THREAD_ID, 1, 1)]
@@ -159,69 +124,76 @@ void DualQuaternionBlendCompute(uint3 threadID : SV_DispatchThreadID)
     {
         BoneInfoPerVertex info = boneInfoBuffer[realVertexID];
 
-        float2x4 curPoseDQ = GetCurrentPoseDQ(info.index[0]) * info.weight[0],
-                restPoseDQ = GetRestPoseDQ(info.index[0]) * info.weight[0],
-                poseDQBuffer, otherRestPoseDQ;
+        DQ	curPoseDQ = multiply(GetCurrentPoseDQ(info.index[0]), info.weight[0]),
+            restPoseDQ = multiply(GetRestPoseDQ(info.index[0]), info.weight[0]),
+            poseDQBuffer, otherRestPoseDQ;
 
         if (boneInfoBuffer[realVertexID].weight[1] > 0)
         {
             poseDQBuffer = GetCurrentPoseDQ(info.index[1]);
 
-            if (dot(curPoseDQ[0], poseDQBuffer[0]) >= 0)
-                curPoseDQ += poseDQBuffer * info.weight[1];
+            if (dot(curPoseDQ.real, poseDQBuffer.real) >= 0)
+                curPoseDQ = add(curPoseDQ, multiply(poseDQBuffer, info.weight[1]));
             else
-                curPoseDQ -= poseDQBuffer * info.weight[1];
+                curPoseDQ = minus(curPoseDQ, multiply(poseDQBuffer, info.weight[1]));
 
             poseDQBuffer = GetRestPoseDQ(info.index[1]);
             
-            if (dot(restPoseDQ[0], poseDQBuffer[0]) >= 0)
-                restPoseDQ += poseDQBuffer * info.weight[1];
+			if (dot(restPoseDQ.real, poseDQBuffer.real) >= 0)
+				restPoseDQ = add(restPoseDQ, multiply(poseDQBuffer, info.weight[1]));
             else
-                restPoseDQ -= poseDQBuffer * info.weight[1];
+                restPoseDQ = minus(restPoseDQ, multiply(poseDQBuffer, info.weight[1]));
         }
             
         if (boneInfoBuffer[realVertexID].weight[2] > 0)
         {
-            poseDQBuffer = GetCurrentPoseDQ(info.index[2]);
+			poseDQBuffer = GetCurrentPoseDQ(info.index[2]);
 
-            if (dot(curPoseDQ[0], poseDQBuffer[0]) >= 0)
-                curPoseDQ += poseDQBuffer * info.weight[2];
-            else
-                curPoseDQ -= poseDQBuffer * info.weight[2];
+			if (dot(curPoseDQ.real, poseDQBuffer.real) >= 0)
+				curPoseDQ = add(curPoseDQ, multiply(poseDQBuffer, info.weight[2]));
+			else
+				curPoseDQ = minus(curPoseDQ, multiply(poseDQBuffer, info.weight[2]));
 
-            poseDQBuffer = GetRestPoseDQ(info.index[2]);
-            
-            if (dot(restPoseDQ[0], poseDQBuffer[0]) >= 0)
-                restPoseDQ += poseDQBuffer * info.weight[2];
-            else
-                restPoseDQ -= poseDQBuffer * info.weight[2];
-        }
+			poseDQBuffer = GetRestPoseDQ(info.index[2]);
+
+			if (dot(restPoseDQ.real, poseDQBuffer.real) >= 0)
+				restPoseDQ = add(restPoseDQ, multiply(poseDQBuffer, info.weight[2]));
+			else
+				restPoseDQ = minus(restPoseDQ, multiply(poseDQBuffer, info.weight[2]));
+		}
         
         if (boneInfoBuffer[realVertexID].weight[3] > 0)
         {
-            poseDQBuffer = GetCurrentPoseDQ(info.index[3]);
+			poseDQBuffer = GetCurrentPoseDQ(info.index[3]);
 
-            if (dot(curPoseDQ[0], poseDQBuffer[0]) >= 0)
-                curPoseDQ += poseDQBuffer * info.weight[3];
-            else
-                curPoseDQ -= poseDQBuffer * info.weight[3];
+			if (dot(curPoseDQ.real, poseDQBuffer.real) >= 0)
+				curPoseDQ = add(curPoseDQ, multiply(poseDQBuffer, info.weight[3]));
+			else
+				curPoseDQ = minus(curPoseDQ, multiply(poseDQBuffer, info.weight[3]));
 
-            poseDQBuffer = GetRestPoseDQ(info.index[3]);
-            
-            if (dot(restPoseDQ[0], poseDQBuffer[0]) >= 0)
-                restPoseDQ += poseDQBuffer * info.weight[3];
-            else
-                restPoseDQ -= poseDQBuffer * info.weight[3];
-        }
-        
-        //curPoseDQ[0] = normalize(curPoseDQ[0]);
-        //restPoseDQ[0] = normalize(restPoseDQ[0]); 
+			poseDQBuffer = GetRestPoseDQ(info.index[3]);
 
+			if (dot(restPoseDQ.real, poseDQBuffer.real) >= 0)
+				restPoseDQ = add(restPoseDQ, multiply(poseDQBuffer, info.weight[3]));
+			else
+				restPoseDQ = minus(restPoseDQ, multiply(poseDQBuffer, info.weight[3]));
+		}
+
+        //*
         curPoseDQ = mulDQ(restPoseDQ, curPoseDQ);
 
-        meshStream[realVertexID].position = float4(transformPositionByDQ(curPoseDQ, meshBuffer[realVertexID].position.xyz), 1);
-        meshStream[realVertexID].normal = float4(transformPositionByDQ(curPoseDQ, meshBuffer[realVertexID].normal.xyz), 1);
+        meshStream[realVertexID].position = float4(transformPositionByDQ(curPoseDQ, meshBuffer[realVertexID].position.xyz), 0);
+        meshStream[realVertexID].normal = float4(transformPositionByDQ(curPoseDQ, meshBuffer[realVertexID].normal.xyz), 0);
         meshStream[realVertexID].uv = meshBuffer[realVertexID].uv;
+        /*/
+        
+        curPoseDQ = mulDQ(restPoseDQ, curPoseDQ);
+        float4x4 convertedMatrix = DQToMatrix(curPoseDQ);
+
+        meshStream[realVertexID].position = mul(convertedMatrix, meshBuffer[realVertexID].position);
+        meshStream[realVertexID].normal = mul(convertedMatrix, meshBuffer[realVertexID].normal);
+        meshStream[realVertexID].uv = meshBuffer[realVertexID].uv;
+        //*/
     }
 }
  

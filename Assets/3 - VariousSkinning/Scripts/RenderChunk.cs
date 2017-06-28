@@ -84,14 +84,21 @@
             
             // Don't be lazy, lazy calculate reduce performence.
             restPoseBoneInverseMatrix = new Matrix4x4[bones.Length];
-
-            for (int i = 0; i < restPoseBoneInverseMatrix.Length; i++)
-                restPoseBoneInverseMatrix[i] = bones[i].worldToLocalMatrix;
-
             restPoseBoneInverseDQ = new DualQuaternion[bones.Length];
 
-            for (int i = 0; i < restPoseBoneInverseDQ.Length; i++)
+            for (int i = 0; i < bones.Length; i++)
+            {
+                restPoseBoneInverseMatrix[i] = bones[i].worldToLocalMatrix;
                 restPoseBoneInverseDQ[i] = bones[i].GetWorldToLocalDQ();
+
+                Vector3 matCon = (restPoseBoneInverseMatrix[i]).MultiplyPoint(bones[i].transform.position),
+                        dqCon = (restPoseBoneInverseDQ[i]) * bones[i].transform.position;
+                if (matCon != (dqCon))
+                {
+                    Debug.Log("rest " + i + ":" + matCon + "," + dqCon);
+                }
+            }
+
         }
     }
 }

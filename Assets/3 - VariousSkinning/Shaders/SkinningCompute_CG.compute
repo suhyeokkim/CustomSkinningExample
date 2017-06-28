@@ -1,4 +1,8 @@
-﻿CGPROGRAM
+﻿/*
+    referred site for dual quaternion : http://donw.io/post/dual-quaternion-skinning/ , http://developer.download.nvidia.com/SDK/10.5/direct3d/screenshots/samples/QuaternionSkinning.html
+*/
+
+CGPROGRAM
 
 #pragma kernel LinearBlendCompute
 #pragma kernel DualQuaternionBlendCompute
@@ -111,20 +115,41 @@ inline float2x4 GetRestPoseDQ(int boneIndex)
     return restPoseDQBuffer[boneIndex];
 }
 
+inline float4 conjugateQuaternion(float4 quat)
+{
+    return float4(quat.xyz * -1, quat.w);
+}
+
+inline float4 mulQ(float4 q1, float4 q2)
+{
+    return float4(
+                    q1.w * q2.x + q1.x * q2.w + q1.y * q2.z - q1.z * q2.y, 
+                    q1.w * q2.y - q1.x * q2.z + q1.y * q2.w + q1.z * q2.x, 
+                    q1.w * q2.z - q1.x * q2.y - q1.y * q2.x + q1.z * q2.w,
+                    q1.w * q2.w - q1.x * q2.x - q1.y * q2.y - q1.z * q2.z
+                );
+}
+
 inline float2x4 mulDQ(float2x4 dq1, float2x4 dq2)
 {
     float2x4 dq;
     
-    dq[0] = mul(dq1[0], dq2[0]);
-    dq[1] = mul(dq1[0], dq2[1]) + mul(dq1[1], dq2[0]);
+    dq[0] = mulQ(dq1[0], dq2[0]);
+    dq[1] = mulQ(dq1[0], dq2[1]) + mulQ(dq1[1], dq2[0]);
     
     return dq;
 }
 
-inline float4 transformPositionByDQ(float2x4 dq, float4 pos)
+inline float3 transformPositionByQ(float4 q1, float3 pos)
 {
-    // WIP
-    return float4(pos.xyz + pos.xyz, 1f);
+    float4 pos4 = float4(pos, 0);
+
+    return mulQ(mulQ(q1, pos4), conjugateQuaternion(q1)).xyz;
+}
+
+inline float3 transformPositionByDQ(float2x4 dq, float3 pos)
+{ 
+    return transformPositionByQ(dq[0], pos).xyz + mulQ(conjugateQuaternion(dq[0]), dq[1] * 2).xyz;
 }
 
 [numthreads(MAX_THREAD_ID, 1, 1)]
@@ -189,16 +214,13 @@ void DualQuaternionBlendCompute(uint3 threadID : SV_DispatchThreadID)
                 restPoseDQ -= poseDQBuffer * info.weight[3];
         }
         
-        curPoseDQ = mulDQ(curPoseDQ, restPoseDQ);
+        //curPoseDQ[0] = normalize(curPoseDQ[0]);
+        //restPoseDQ[0] = normalize(restPoseDQ[0]); 
 
-        meshStream[realVertexID].position = transformPositionByDQ(
-					                            curPoseDQ,
-					                            float4(meshBuffer[realVertexID].position.xyz, 1)
-				                            );
-        meshStream[realVertexID].normal =   transformPositionByDQ(
-					                            curPoseDQ,
-					                            float4(meshBuffer[realVertexID].normal.xyz, 1)
-				                            );
+        curPoseDQ = mulDQ(restPoseDQ, curPoseDQ);
+
+        meshStream[realVertexID].position = float4(transformPositionByDQ(curPoseDQ, meshBuffer[realVertexID].position.xyz), 1);
+        meshStream[realVertexID].normal = float4(transformPositionByDQ(curPoseDQ, meshBuffer[realVertexID].normal.xyz), 1);
         meshStream[realVertexID].uv = meshBuffer[realVertexID].uv;
     }
 }

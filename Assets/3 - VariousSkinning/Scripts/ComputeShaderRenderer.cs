@@ -8,7 +8,7 @@
 
     public static class SkinningComputeFactoray
     {
-        public static ICompute CreateComputeBy(SkinningMethod method, RenderChunk chunk, RuntimeRenderChunk runtimeChunk, Func<ComputeBuffer> getMeshDataBuffer, Func<ComputeBuffer> getMeshDataStream)
+        public static IDisposableCompute CreateComputeBy(SkinningMethod method, RenderChunk chunk, RuntimeRenderChunk runtimeChunk, Func<ComputeBuffer> getMeshDataBuffer, Func<ComputeBuffer> getMeshDataStream)
         {
             switch (method)
             {
@@ -25,12 +25,12 @@
     /// <summary>
     /// ComputeShader based skinning adapter
     /// </summary>
-    public class ComputeShaderAdapter : IUpdate, IRenderer
+    public class ComputeShaderAdapter : IUpdate, IRenderer, IDisposable
     {
         public SkinningMethod method;
 
-        public ICompute compute;
-        public IRenderer renderer;
+        public IDisposableCompute compute;
+        public IDisposableRenderer renderer;
 
         public ComputeBuffer meshDataBuffer;
         public ComputeBuffer meshDataStream;
@@ -58,12 +58,19 @@
         {
             renderer.OnRenderObject();
         }
+
+        public void Dispose()
+        {
+            meshDataBuffer.Dispose();
+            meshDataStream.Dispose();
+
+            compute.Dispose();
+            renderer.Dispose();
+        }
     }
 
-    public interface ICompute
-    {
-        void Compute();
-    }
+    public interface ICompute : IDisposable { void Compute(); }
+    public interface IDisposableCompute : ICompute, IDisposable { }
 
     /// <summary>
     /// Compute realtime skinning.
@@ -71,18 +78,15 @@
     /// 
     /// This class implementation is depend on ComputeShader.
     /// if you change computeShader source, Have to change this class implementation.
+    /// 
+    /// boneWeightPerVertexBuffer : source bone index, weight from UnityEngine.Mesh
+    /// boneCurrentPoseMatrixBuffer : current pose transformation matrix from UnityEngine.Transform
+    /// boneRestPoseMatrixBuffer : rest pose inverse transformation matrix from RuntimeRenderChunk.restPoseBoneInverseMatrix
+    /// getMeshDataBuffer : get data from outside, source vetices, normals, uvs(compatibility for renderer)
+    /// getMeshDataStream : get data from outside, converted vertices, normals, uvs(compatibility for renderer)
     /// </summary>
-    public class LinearBlendSkinningCompute : ICompute
+    public class LinearBlendSkinningCompute : IDisposableCompute
     {
-        /*
-         * boneWeightPerVertexBuffer : source bone index, weight from UnityEngine.Mesh
-         * 
-         * boneCurrentPoseMatrixBuffer : current pose transformation matrix from UnityEngine.Transform
-         * boneRestPoseMatrixBuffer : rest pose inverse transformation matrix from RuntimeRenderChunk.restPoseBoneInverseMatrix
-         * 
-         * getMeshDataBuffer : get data from outside, source vetices, normals, uvs(compatibility for renderer)
-         * getMeshDataStream : get data from outside, converted vertices, normals, uvs(compatibility for renderer)
-         */
         public int vertexCount;
 
         public uint maxThreadSizeX;
@@ -131,7 +135,7 @@
             computeShader.SetBuffer(kernelIndex, "meshBuffer", getMeshDataBuffer());
             computeShader.SetBuffer(kernelIndex, "meshStream", getMeshDataStream());
         }
-
+        
         public void Compute()
         {
             for (int i = 0; i < currentPoseMatrixArray.Length; i++)
@@ -141,6 +145,25 @@
 
             computeShader.Dispatch(kernelIndex, (int)(vertexCount / (long)maxThreadSizeX + 1), 1, 1);
         }
+
+        public void Dispose()
+        {
+            boneCurrentPoseMatrixBuffer.Dispose();
+            boneRestPoseMatrixBuffer.Dispose();
+            boneWeightPerVertexBuffer.Dispose();
+        }
+    }
+
+    public static class QuaternionExtension
+    {
+        public static Quaternion AddQuaternion(Quaternion q1, Quaternion q2)
+        {
+            return new Quaternion(q1.x + q2.x, q1.y + q2.y, q1.z + q2.z, q1.w + q2.w);
+        }
+        public static Quaternion Multiply(Quaternion q, float f)
+        {
+            return new Quaternion(q.x * f, q.y * f, q.z * f, q.w * f);
+        }
     }
 
     /// <summary>
@@ -148,8 +171,34 @@
     /// </summary>
     public struct DualQuaternion
     {
-        public Quaternion rotation;
-        public Quaternion translate;
+        public Quaternion real;
+        public Quaternion dual;
+
+        public static DualQuaternion identity = new DualQuaternion(Quaternion.identity, Vector3.zero);
+
+        public DualQuaternion(Quaternion real, Quaternion dual)
+        {
+            this.real = real;
+            this.dual = dual;
+        }
+
+        public DualQuaternion(Quaternion rotation, Vector3 position)
+        {
+            real = rotation;
+
+            dual = (rotation * new Quaternion(position.x * 0.5f, position.y * 0.5f, position.z * 0.5f, 0));
+        }
+            
+        public static DualQuaternion operator *(DualQuaternion dq1, DualQuaternion dq2)
+        {
+            // WIP
+            return new DualQuaternion(dq1.real * dq2.real, QuaternionExtension.AddQuaternion(dq1.real * dq2.dual, dq1.dual * dq2.real));
+        }
+
+        public static Vector3 operator *(DualQuaternion dq, Vector3 pos)
+        {
+            Quaternion t = Quaternion.Inverse(dq.real) * new Quaternion(dq.dual.x * 2f, dq.dual.y * 2f, dq.dual.z * 2f, dq.dual.w * 2f);            return dq.real * pos + new Vector3(t.x, t.y, t.z);
+        }
     }
 
     /// <summary>
@@ -157,28 +206,55 @@
     /// </summary>
     public static class DQExtension
     {
+        // WIP
         public static DualQuaternion GetLocalToWorldDQ(this Transform transform)
         {
-            DualQuaternion dq = new DualQuaternion();
-            Vector3 pos = transform.position;
-            Quaternion quat = transform.rotation;
+            DualQuaternion realDQ = new DualQuaternion();
+            Transform iterate = transform;
 
-            dq.rotation = quat;
+            while (transform != null)
+            {
+                Vector3 pos = transform.localPosition;
+                Quaternion quat = transform.localRotation;
 
-            dq.translate[0] = -0.5f * (pos[0] * quat[1] + pos[1] * quat[2] + pos[2] * quat[3]);
-            dq.translate[1] = 0.5f * (pos[0] * quat[0] + pos[1] * quat[3] - pos[2] * quat[2]);
-            dq.translate[2] = 0.5f * (-pos[0] * quat[3] + pos[1] * quat[0] + pos[2] * quat[1]);
-            dq.translate[3] = 0.5f * (pos[0] * quat[2] - pos[1] * quat[1] + pos[2] * quat[0]);
+                DualQuaternion dq = new DualQuaternion(quat, pos);
 
-            return dq;
+                if (transform == iterate)
+                    realDQ = dq;
+                else
+                    realDQ = dq * realDQ;
+
+                transform = transform.parent;
+            }
+
+            return realDQ;
         }
 
+        // WIP
         public static DualQuaternion GetWorldToLocalDQ(this Transform transform)
         {
-            DualQuaternion dq = new DualQuaternion();
-            return dq;
+            DualQuaternion realDQ = new DualQuaternion();
+            Transform iterate = transform;
+
+            while (transform != null)
+            {
+                Vector3 pos = transform.localPosition * -1;
+                Quaternion quat = Quaternion.Inverse(transform.localRotation);
+
+                DualQuaternion dq = new DualQuaternion(quat, pos);
+
+                if (transform == iterate)
+                    realDQ = dq;
+                else
+                    realDQ = realDQ * dq;
+
+                transform = transform.parent;
+            }
+
+            return realDQ;
         }
     }
+
 
     /// <summary>
     /// Compute realtime skinning.
@@ -186,18 +262,16 @@
     /// 
     /// This class implementation is depend on ComputeShader.
     /// if you change computeShader source, Have to change this class implementation.
+    /// 
+    /// boneRestPoseDQBuffer : source bone index, weight from UnityEngine.Mesh
+    /// boneCurrentPoseDQBuffer : current pose transformation dual quaternion from UnityEngine.Transform
+    /// boneRestPoseMatrixBuffer : rest pose inverse transformation matrix from RuntimeRenderChunk.restPoseBoneInverseMatrix
+    /// 
+    /// getMeshDataBuffer : get data from outside, source vetices, normals, uvs(compatibility for renderer)
+    /// getMeshDataStream : get data from outside, converted vertices, normals, uvs(compatibility for renderer)
     /// </summary>
-    public class DualQuaternionBlendSkinningCompute : ICompute
+    public class DualQuaternionBlendSkinningCompute : IDisposableCompute
     {
-        /*
-         * boneWeightPerVertexBuffer : source bone index, weight from UnityEngine.Mesh
-         * 
-         * boneCurrentPoseMatrixBuffer : current pose transformation matrix from UnityEngine.Transform
-         * boneRestPoseMatrixBuffer : rest pose inverse transformation matrix from RuntimeRenderChunk.restPoseBoneInverseMatrix
-         * 
-         * getMeshDataBuffer : get data from outside, source vetices, normals, uvs(compatibility for renderer)
-         * getMeshDataStream : get data from outside, converted vertices, normals, uvs(compatibility for renderer)
-         */
         public int vertexCount;
 
         public uint maxThreadSizeX;
@@ -239,13 +313,14 @@
             computeShader.SetInt("vertexCount", vertexCount);
 
             computeShader.SetBuffer(kernelIndex, "currentPoseDQBuffer", boneCurrentPoseDQBuffer);
-            computeShader.SetBuffer(kernelIndex, "restPoseMatrixBuffer", boneRestPoseDQBuffer);
+            computeShader.SetBuffer(kernelIndex, "restPoseDQBuffer", boneRestPoseDQBuffer);
+
             computeShader.SetBuffer(kernelIndex, "boneInfoBuffer", boneWeightPerVertexBuffer);
 
             computeShader.SetBuffer(kernelIndex, "meshBuffer", getMeshDataBuffer());
             computeShader.SetBuffer(kernelIndex, "meshStream", getMeshDataStream());
         }
-
+        
         public void Compute()
         {
             for (int i = 0; i < currentPoseDQArray.Length; i++)
@@ -257,6 +332,13 @@
 
             computeShader.Dispatch(kernelIndex, (int)(vertexCount / (long)maxThreadSizeX + 1), 1, 1);
         }
+
+        public void Dispose()
+        {
+            boneCurrentPoseDQBuffer.Dispose();
+            boneRestPoseDQBuffer.Dispose();
+            boneWeightPerVertexBuffer.Dispose();
+        }
     }
 
     /// <summary>
@@ -264,15 +346,14 @@
     /// 
     /// This class implementation is depend on shader which noticed material.
     /// if you change shader source, Have to change this class implementation.
+    /// 
+    /// indexBuffer : Index Buffer from UnityEngine.Mesh
+    /// indexCountBuffer : end index which is each SubMesh in indexArray for texture index(Texture2DArray)
+    /// 
+    /// getMeshDataStream : get data from outside, converted vertices, normals, uvs
     /// </summary>
-    public class ComputeShaderRenderer : IRenderer
+    public class ComputeShaderRenderer : IDisposableRenderer
     {
-        /*
-         * indexBuffer : Index Buffer from UnityEngine.Mesh
-         * indexCountBuffer : end index which is each SubMesh in indexArray for texture index(Texture2DArray)
-         * 
-         * getMeshDataStream : get data from outside, converted vertices, normals, uvs
-         */
         public Material material;
 
         public ComputeBuffer indexBuffer;
@@ -291,6 +372,12 @@
             indexCountBuffer.SetData(chunk.indexCounts);
 
             this.getMeshDataStream = getMeshDataStream;
+        }
+
+        public void Dispose()
+        {
+            indexBuffer.Dispose();
+            indexCountBuffer.Dispose();
         }
 
         public void OnRenderObject()

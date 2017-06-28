@@ -16,7 +16,7 @@
         {
             get
             {
-                return System.Runtime.InteropServices.Marshal.SizeOf(new MeshDataInfo());
+                return System.Runtime.InteropServices.Marshal.SizeOf(typeof(MeshDataInfo));
             }
         }
     };
@@ -82,6 +82,7 @@
                 return;
             }
             
+            // Don't be lazy, lazy calculate reduce performence.
             restPoseBoneInverseMatrix = new Matrix4x4[bones.Length];
 
             for (int i = 0; i < restPoseBoneInverseMatrix.Length; i++)

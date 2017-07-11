@@ -1,4 +1,6 @@
-﻿Shader "Custom/ComputedBaseMaleShader"
+﻿// Upgrade NOTE: replaced '_World2Object' with 'unity_WorldToObject'
+
+Shader "Custom/ComputedBaseMaleShader"
 {
 	Properties
 	{
@@ -18,6 +20,7 @@
 			#pragma fragment frag
 			
 			#include "UnityCG.cginc"
+			#include "Lighting.cginc"
 
 			struct RenderData
 			{
@@ -63,7 +66,11 @@
 
 			fixed4 frag (v2f i) : SV_Target
 			{
-				return _Color;
+				float4 normal = float4(i.normal, 0.0);
+				float3 n = normalize(mul(normal, unity_WorldToObject));
+				float3 l = normalize(_WorldSpaceLightPos0);
+
+				return saturate(max(0.0, dot(n, l)) * _LightColor0 * _Color);
 			}
 			ENDCG
 		}

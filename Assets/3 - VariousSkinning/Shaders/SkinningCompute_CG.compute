@@ -1,0 +1,272 @@
+﻿CGPROGRAM
+
+#pragma kernel LinearBlendCompute
+#pragma kernel DualQuaternionBlendCompute
+#pragma kernel OpimizedCenterOfRoationCompute
+
+#pragma kernel DataToDataCompute
+
+// Start of Linear Blend Skinning
+/*
+ *  per-vertex data layout
+ */
+struct VertexInfo
+{
+    float4 position;
+    float4 normal;
+
+    float4 weight;
+    int4 index;
+    
+    float2 uv;
+};
+
+/*
+ *  render data per vertex
+ */
+struct RenderData
+{
+    float4 position;
+    float4 normal;
+
+    float2 uv;
+};
+
+/*
+ *  Mesh source and bone weights and index
+ */
+StructuredBuffer<VertexInfo> meshBuffer;
+//StructuredBuffer<BoneInfoPerVertex> boneInfoBuffer;
+
+/*
+ *  Converted mesh data;
+ */
+RWStructuredBuffer<RenderData> meshStream;
+
+/*
+ *  LinearBlendSkinning Data
+ */
+StructuredBuffer<float4x4> currentPoseMatrixBuffer;
+StructuredBuffer<float4x4> restPoseMatrixBuffer;
+
+cbuffer Config
+{
+    uint vertexCount;
+}
+
+inline float4x4 GetCurrentPoseMatrix(int boneIndex)
+{
+    return currentPoseMatrixBuffer[boneIndex];
+}
+
+inline float4x4 GetRestPoseMatrix(int boneIndex)
+{
+    return restPoseMatrixBuffer[boneIndex];
+}
+
+#define MAX_THREAD_ID 512
+
+[numthreads(MAX_THREAD_ID, 1, 1)]
+void LinearBlendCompute(uint3 threadID : SV_DispatchThreadID)
+{
+    for (uint realVertexID = threadID[0]; realVertexID < vertexCount; realVertexID += MAX_THREAD_ID)
+    {
+        VertexInfo info = meshBuffer[realVertexID];
+
+        float4x4 
+            transformMatrix = mul(GetCurrentPoseMatrix(info.index[0]), GetRestPoseMatrix(info.index[0]));
+        float4 
+            position =  mul(
+                            transformMatrix, 
+                            float4(meshBuffer[realVertexID].position.xyz, 1)
+                        ) * info.weight[0];
+        float4
+            normal =    mul(
+                            transformMatrix, 
+                            float4(meshBuffer[realVertexID].normal.xyz, 0)
+                        ) * info.weight[0];
+
+        if (info.weight[1] > 0)
+        {
+            transformMatrix = mul(GetCurrentPoseMatrix(info.index[1]), GetRestPoseMatrix(info.index[1]));
+            position += mul(
+                            transformMatrix, 
+                            float4(meshBuffer[realVertexID].position.xyz, 1)
+                        ) * info.weight[1];
+            
+            normal +=   mul(
+                            transformMatrix,
+                            float4(meshBuffer[realVertexID].normal.xyz, 0)
+                        ) * info.weight[1];
+        }
+            
+        if (info.weight[2] > 0)
+        {
+            transformMatrix = mul(GetCurrentPoseMatrix(info.index[2]), GetRestPoseMatrix(info.index[2]));
+            position += mul(
+                            transformMatrix, 
+                            float4(meshBuffer[realVertexID].position.xyz, 1)
+                        ) * info.weight[2];
+            
+            normal += mul(
+                            transformMatrix,
+                            float4(meshBuffer[realVertexID].normal.xyz, 0)
+                        ) * info.weight[2];
+
+        }
+        
+        if(info.weight[3] > 0)
+        {
+            transformMatrix = mul(GetCurrentPoseMatrix(info.index[3]), GetRestPoseMatrix(info.index[3]));
+            position += mul(
+                            transformMatrix,
+                            float4(meshBuffer[realVertexID].position.xyz, 1)
+                        ) * info.weight[3];
+            
+            normal += mul(
+                            transformMatrix,
+                            float4(meshBuffer[realVertexID].normal.xyz, 0)
+                        ) * info.weight[3];
+        }
+        
+        meshStream[realVertexID].position = position;
+        meshStream[realVertexID].normal = normal;
+        meshStream[realVertexID].uv = meshBuffer[realVertexID].uv;
+    }
+}
+
+// Start of Dual Quaternion Blend Skinning
+#include <DualQuaternion.cginc>
+
+StructuredBuffer<DQ> currentPoseDQBuffer;
+StructuredBuffer<DQ> restPoseDQBuffer;
+
+inline DQ GetCurrentPoseDQ(int boneIndex)
+{
+    return currentPoseDQBuffer[boneIndex];
+}
+
+inline DQ GetRestPoseDQ(int boneIndex)
+{
+    return restPoseDQBuffer[boneIndex];
+}
+
+[numthreads(MAX_THREAD_ID, 1, 1)]
+void DualQuaternionBlendCompute(uint3 threadID : SV_DispatchThreadID)
+{
+    for (uint realVertexID = threadID[0]; realVertexID < vertexCount; realVertexID += MAX_THREAD_ID)
+    {
+        VertexInfo info = meshBuffer[realVertexID];
+
+        DQ	curPoseDQ = multiply(GetCurrentPoseDQ(info.index[0]), info.weight[0]),
+            restPoseDQ = multiply(GetRestPoseDQ(info.index[0]), info.weight[0]),
+            poseDQBuffer, otherRestPoseDQ;
+
+		if (info.weight[1] > 0)
+		{
+			poseDQBuffer = GetCurrentPoseDQ(info.index[1]);
+
+			if (dot(curPoseDQ.real, poseDQBuffer.real) >= 0)
+				curPoseDQ = add(curPoseDQ, multiply(poseDQBuffer, info.weight[1]));
+			else
+				curPoseDQ = minus(curPoseDQ, multiply(poseDQBuffer, info.weight[1]));
+
+			poseDQBuffer = GetRestPoseDQ(info.index[1]);
+
+			if (dot(restPoseDQ.real, poseDQBuffer.real) >= 0)
+				restPoseDQ = add(restPoseDQ, multiply(poseDQBuffer, info.weight[1]));
+			else
+				restPoseDQ = minus(restPoseDQ, multiply(poseDQBuffer, info.weight[1]));
+
+		}
+
+		if (info.weight[2] > 0)
+		{
+			poseDQBuffer = GetCurrentPoseDQ(info.index[2]);
+
+			if (dot(curPoseDQ.real, poseDQBuffer.real) >= 0)
+				curPoseDQ = add(curPoseDQ, multiply(poseDQBuffer, info.weight[2]));
+			else
+				curPoseDQ = minus(curPoseDQ, multiply(poseDQBuffer, info.weight[2]));
+
+			poseDQBuffer = GetRestPoseDQ(info.index[2]);
+
+			if (dot(restPoseDQ.real, poseDQBuffer.real) >= 0)
+				restPoseDQ = add(restPoseDQ, multiply(poseDQBuffer, info.weight[2]));
+			else
+				restPoseDQ = minus(restPoseDQ, multiply(poseDQBuffer, info.weight[2]));
+		}
+
+		if (info.weight[3] > 0)
+		{
+			poseDQBuffer = GetCurrentPoseDQ(info.index[3]);
+
+			if (dot(curPoseDQ.real, poseDQBuffer.real) >= 0)
+				curPoseDQ = add(curPoseDQ, multiply(poseDQBuffer, info.weight[3]));
+			else
+				curPoseDQ = minus(curPoseDQ, multiply(poseDQBuffer, info.weight[3]));
+
+			poseDQBuffer = GetRestPoseDQ(info.index[3]);
+
+			if (dot(restPoseDQ.real, poseDQBuffer.real) >= 0)
+				restPoseDQ = add(restPoseDQ, multiply(poseDQBuffer, info.weight[3]));
+			else
+				restPoseDQ = minus(restPoseDQ, multiply(poseDQBuffer, info.weight[3]));
+		}
+		 
+        DQ transform = mulDQ(normalizeDQ(curPoseDQ), normalizeDQ(restPoseDQ));
+
+        meshStream[realVertexID].position = float4(transformPositionByDQ(transform, meshBuffer[realVertexID].position.xyz), 0);
+        meshStream[realVertexID].normal = float4(transformPositionByDQ(transform, meshBuffer[realVertexID].normal.xyz), 0);
+        meshStream[realVertexID].uv = meshBuffer[realVertexID].uv;
+    }
+}
+ 
+Buffer<float4> currentPoseRotationBuffer;
+Buffer<float3> currentPoseTranslateBuffer;
+
+Buffer<float4> restPoseRotationBuffer;
+Buffer<float3> restPoseTranslateBuffer;
+
+Buffer<float3> centerOfRotationBuffer;
+
+inline float4 GetCurrentPoseRotation(int boneIndex)
+{
+    return currentPoseRotationBuffer[boneIndex];
+}
+
+inline float3 GetCurrentPoseTranslate(int boneIndex)
+{
+    return currentPoseTranslateBuffer[boneIndex];
+}
+
+inline float4 GetRestPoseRotation(int boneIndex)
+{
+    return restPoseRotationBuffer[boneIndex];
+}
+
+inline float3 GetRestPoseTranslate(int boneIndex)
+{
+    return restPoseTranslateBuffer[boneIndex];
+}
+
+[numthreads(MAX_THREAD_ID, 1, 1)]
+void OpimizedCenterOfRoationCompute(uint3 threadID : SV_DispatchThreadID)
+{
+    for (uint realVertexID = threadID[0]; realVertexID < vertexCount; realVertexID += MAX_THREAD_ID)
+    {
+	}
+}
+
+[numthreads(MAX_THREAD_ID, 1, 1)]
+void DataToDataCompute(uint3 threadID : SV_DispatchThreadID)
+{
+    for (uint realVertexID = threadID[0]; realVertexID < vertexCount; realVertexID += MAX_THREAD_ID)
+    {
+        meshStream[realVertexID].position = meshBuffer[realVertexID].position;
+        meshStream[realVertexID].normal = meshBuffer[realVertexID].normal;
+        meshStream[realVertexID].uv = meshBuffer[realVertexID].uv;
+    }
+}
+
+ENDCG

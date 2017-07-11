@@ -91,10 +91,13 @@
 
         #region calculate for center of rotation
 
-        public Vector3[] centerOfClusterArray;
-        public int[] centerOfClusterIndexArray;
+        // nothing related, maybe related root vertex length
+        public int[] centerOfClusterVertexIndexArray;
+        // related vertex length
+        public int[] centerOfClusterClusterNumberArray;
 
-        public Vector3[] centerOfRotationArray;
+        // Generated position data per vertex
+        public Vector3[] centerOfRotationPositionArray;
 
         #endregion
 
@@ -108,6 +111,9 @@
             indexCounts = null;
             vertexCount = 0;
             meshData = null;
+            centerOfClusterVertexIndexArray = null;
+            centerOfClusterClusterNumberArray = null;
+            centerOfRotationPositionArray = null;
         }
 
         public Transform[] GetBones(Transform tranform)

@@ -8,7 +8,7 @@
 
     public static class RenderChunkHandler
     {
-        public static void SetBoneData(this RenderChunk chunk, SkinnedMeshRenderer renderer)
+        public static void SetBoneData(this SkinnedMeshRenderer renderer, RenderChunk chunk)
         {
             if (renderer == null)
             {
@@ -23,7 +23,7 @@
             chunk.inverseRestPoseDQArray = Array.ConvertAll(renderer.bones, (bone) => bone.GetWorldToLocalDQ());
         }
 
-        public static void SetMeshData(this RenderChunk chunk, Mesh mesh)
+        public static void SetMeshData(this Mesh mesh, RenderChunk chunk)
         {
             if (mesh == null)
             {
@@ -69,7 +69,7 @@
             }
         }
 
-        public static void SetIndices(this RenderChunk chunk, Mesh mesh)
+        public static void SetIndices(this Mesh mesh, RenderChunk chunk)
         {
             if (mesh == null)
             {
@@ -286,12 +286,12 @@
                 return similarity;
             }
         }
-
+        
         /*
          * Approximate nearest neighbor search
          * 1. WeightIndex, WeightWeight 가 기준인 skinning weight space 에서 maximized minimum distance point set 을 계산하여 몇개의 정점을 뽑아서 저장함. 
-         *    계산된 Weight들은 비슷한 Weight 의 반복을 피하기 위하여 대표로 뽑히 Weight임. 또한 같은 Weight 를 가지면 같은 cluster 로 취급함.
-         * 2. 계산된 정점으로 ||Wi - Wj||2 < ω 식을 계산하여 ANN 을 실행함. 앞의 식은 Weight 사이의 차이를 나타내므로 작으면 작을수록 가깝다는 뜻임. 즉 가까우면 계속 진행하는 구문이다. 
+         *    계산된 Weight들은 비슷한 Weight 의 반복을 피하기 위하여 대표로 뽑힌 Weight임. 또한 같은 Weight 를 가지면 같은 cluster 로 취급함.
+         * 2. 계산된 정점으로 ||Wi - Wj||2 < ω 식을 계산하여 ANN 을 실행함. 앞의 식은 Weight 사이의 차이를 나타내므로 작으면 작을수록 가깝다는 뜻임. 즉 가까우면 계속 진행하는 구문. 
          * 
          * Smooth skinning weights assumption 
          * BFS 로 인덱스 버퍼를 그래프의 가중치로 취급하여 탐색함. 판단 구문은 Similarity < ε 이면 탐색을 멈춘다. ε 는 정해준 threshold 임.

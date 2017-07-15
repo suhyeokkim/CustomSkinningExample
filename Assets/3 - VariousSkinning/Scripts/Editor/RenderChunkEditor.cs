@@ -10,17 +10,24 @@
     [CustomEditor(typeof(RenderChunk))]
     public class RenderChunkEditor : Editor
     {
-        private RenderChunk targetAs { get { return target as RenderChunk; } }
+        RenderChunk targetAs { get { return target as RenderChunk; } }
 
-        private const string getboneTitle = "Get Bone Data";
+        const string getboneTitle = "Get Bone Data";
 
-        private const string overrideTitle = "Override UnityEngine.Mesh to RenderChunk Data";
-        private const string addTitle = "Add UnityEngine.Mesh to RenderChunk Data";
-        private const string fillTitle = "Fill RenderChunk Data from UnityEngine.Mesh";
+        const string overrideTitle = "Override UnityEngine.Mesh to RenderChunk Data";
+        const string addTitle = "Add UnityEngine.Mesh to RenderChunk Data";
+        const string fillTitle = "Fill RenderChunk Data from UnityEngine.Mesh";
 
-        private SerializedProperty meshProperty;
-        private SerializedProperty rendererProperty;
-        
+        SerializedProperty meshProperty;
+        SerializedProperty rendererProperty;
+
+        /*
+         * Test variable
+         */
+        bool logSimilarityToggle;
+        int cmpIndex1 = 0, cmpIndex2 = 1;
+        float simKernel = 1;
+
         private void OnEnable()
         {
             rendererProperty = serializedObject.FindProperty("builtInRenderer");
@@ -249,8 +256,29 @@
             }
 
             EditorGUI.EndDisabledGroup();
+
+            logSimilarityToggle = EditorGUILayout.Foldout(logSimilarityToggle, "Log similarity");
+
+            if (logSimilarityToggle)
+            {
+                EditorGUI.indentLevel++;
+
+                cmpIndex1 = EditorGUILayout.IntSlider("Compare Index 1", cmpIndex1, 0, chunk.meshData.Length - 1);
+                cmpIndex2 = EditorGUILayout.IntSlider("Compare Index 2", cmpIndex2, 0, chunk.meshData.Length - 1);
+                simKernel = EditorGUILayout.FloatField("Similarity Kernel", simKernel);
+
+                EditorGUILayout.Space();
+
+                if (GUILayout.Button("log calculate"))
+                {
+                    Debug.Log(chunk.meshData[cmpIndex1] + ", " + chunk.meshData[cmpIndex2]);
+                    Debug.Log(chunk.GetSimliarity(cmpIndex1, cmpIndex2, simKernel));
+                }
+
+                EditorGUI.indentLevel--;
+            }
         }
-        
+
         public void AddData()
         {
             long time = DateTime.Now.Ticks;
@@ -264,15 +292,15 @@
                 mesh.RecalculateNormals();
 
                 EditorUtility.DisplayProgressBar(addTitle, "Get Bone Data", 0.0f);
-                chunk.SetBoneData(chunk.builtInRenderer);
+                chunk.builtInRenderer.SetBoneData(chunk);
 
                 EditorUtility.DisplayProgressBar(addTitle, "Get Index Data", 0.25f);
-                chunk.SetIndices(mesh);
+                mesh.SetIndices(chunk);
 
                 EditorUtility.DisplayProgressBar(addTitle, "Get Mesh Data", 0.5f);
 
                 if (EditorUtility.DisplayDialog(addTitle, "override mesh.vertcies, mesh.triangles to RenderChunk.MeshData\nthis process has been long time, are sure this process?", "Yes", "No"))
-                    chunk.SetMeshData(mesh);
+                    mesh.SetMeshData(chunk);
             }
             catch (Exception e)
             {
@@ -300,13 +328,13 @@
                 mesh.RecalculateNormals();
 
                 EditorUtility.DisplayProgressBar(addTitle, "Get Bone Data", 0.0f);
-                chunk.SetBoneData(chunk.builtInRenderer);
+                chunk.builtInRenderer.SetBoneData(chunk);
 
                 EditorUtility.DisplayProgressBar(overrideTitle, "Get Index Data", 0.25f);
-                chunk.SetIndices(mesh);
+                mesh.SetIndices(chunk);
 
                 EditorUtility.DisplayProgressBar(overrideTitle, "Get Mesh Data", 0.5f);
-                chunk.SetMeshData(mesh);
+                mesh.SetMeshData(chunk);
             }
             catch (Exception e)
             {
@@ -331,13 +359,13 @@
                 Mesh mesh = chunk.builtInRenderer.sharedMesh;
 
                 EditorUtility.DisplayProgressBar(addTitle, "Get Bone Data", 0.0f);
-                chunk.SetBoneData(chunk.builtInRenderer);
+                chunk.builtInRenderer.SetBoneData(chunk);
 
                 if (chunk.indices == null || chunk.indices.Length != mesh.triangles.Length)
                 {
                     EditorUtility.DisplayProgressBar(fillTitle, "Get Index Data", 0.25f);
 
-                    chunk.SetIndices(mesh);
+                    mesh.SetIndices(chunk);
                 }
 
                 if (chunk.meshData == null || chunk.meshData.Length != mesh.vertexCount)
@@ -345,7 +373,7 @@
                     {
                         EditorUtility.DisplayProgressBar(fillTitle, "Get Mesh Data", 0.5f);
 
-                        chunk.SetMeshData(mesh);
+                        mesh.SetMeshData(chunk);
                     }
             }
             catch (Exception e)

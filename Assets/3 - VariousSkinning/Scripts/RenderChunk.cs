@@ -42,6 +42,11 @@
         public Integer4 index;
 
         public Vector2 uv;
+
+        public override string ToString()
+        {
+            return String.Format("Position : {0}, Normal : {1}, Weight : {2}, Index : {3}, UV : {4}", position, normal, weight, index, uv);
+        }
     };
 
     [System.Serializable]

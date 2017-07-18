@@ -21,12 +21,22 @@
         SerializedProperty meshProperty;
         SerializedProperty rendererProperty;
 
+        bool
+            originDataToggle = true,
+            convertedDataToggle = true,
+            eachBoneVertexDataToggle = true;
+
         /*
          * Test variable
          */
         bool logSimilarityToggle;
         int cmpIndex1 = 0, cmpIndex2 = 1;
         float simKernel = 1;
+
+        bool centerOfRotationDataToggle = true;
+        float distanceThreshold = 1;
+
+        bool clusterDataToggle = false;
 
         private void OnEnable()
         {
@@ -74,194 +84,263 @@
 
             EditorGUILayout.Space();
 
-            EditorGUILayout.LabelField("Origin data");
-            EditorGUI.indentLevel++;
+            originDataToggle = EditorGUILayout.Foldout(originDataToggle, "Origin Data");
 
-            if (mesh != null)
+            if (originDataToggle)
             {
-                EditorGUILayout.LabelField("Bones", renderer.bones != null ? renderer.bones.Length.ToString() : "null");
-                EditorGUILayout.LabelField("Vertex Count", mesh.vertexCount.ToString());
-                EditorGUILayout.LabelField("Index Count", mesh.triangles.Length.ToString());
-                EditorGUILayout.LabelField("Bone Weight Count", mesh.boneWeights != null ? mesh.boneWeights.Length.ToString() : "null");
-            }
-            else
-            {
-                EditorGUILayout.HelpBox("Mesh is null.. please insert data above", MessageType.Error);
-            }
+                EditorGUILayout.Space();
 
-            EditorGUI.indentLevel--;
+                EditorGUI.indentLevel++;
 
-            EditorGUI.EndDisabledGroup();
+                if (mesh != null)
+                {
+                    EditorGUILayout.LabelField("Bones", renderer.bones != null ? renderer.bones.Length.ToString() : "null");
+                    EditorGUILayout.LabelField("Vertex Count", mesh.vertexCount.ToString());
+                    EditorGUILayout.LabelField("Index Count", mesh.triangles.Length.ToString());
+                    EditorGUILayout.LabelField("Bone Weight Count", mesh.boneWeights != null ? mesh.boneWeights.Length.ToString() : "null");
+                }
+                else
+                {
+                    EditorGUILayout.HelpBox("Mesh is null.. please insert data above", MessageType.Error);
+                }
 
-            EditorGUILayout.Space();
+                EditorGUI.indentLevel--;
 
-            EditorGUILayout.LabelField("Converted Data");
-            EditorGUI.indentLevel++;
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Root Bone Name", chunk.rootBoneName != null ? chunk.rootBoneName : "null");
-
-            EditorGUI.BeginDisabledGroup(chunk.rootBoneName == null);
-
-            if (GUILayout.Button("Clear"))
-            {
-                chunk.rootBoneName = null;
-
-                EditorUtility.SetDirty(target);
-                AssetDatabase.SaveAssets();
-                AssetDatabase.Refresh();
-            }
-
-            EditorGUI.EndDisabledGroup();
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Indexed Bone Name Array", chunk.indexedBoneNameArray != null ? chunk.indexedBoneNameArray.Length.ToString() : "null");
-
-            EditorGUI.BeginDisabledGroup(chunk.indexedBoneNameArray == null);
-
-            if (GUILayout.Button("Clear"))
-            {
-                chunk.indexedBoneNameArray = null;
-
-                EditorUtility.SetDirty(target);
-                AssetDatabase.SaveAssets();
-                AssetDatabase.Refresh();
-            }
-
-            EditorGUI.EndDisabledGroup();
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Bones Matrix", chunk.inverseRestPoseMatrixArray != null ? chunk.inverseRestPoseMatrixArray.Length.ToString() : "null");
-
-            EditorGUI.BeginDisabledGroup(chunk.inverseRestPoseMatrixArray == null);
-
-            if (GUILayout.Button("Clear"))
-            {
-                chunk.inverseRestPoseMatrixArray = null;
-
-                EditorUtility.SetDirty(target);
-                AssetDatabase.SaveAssets();
-                AssetDatabase.Refresh();
-            }
-
-            EditorGUI.EndDisabledGroup();
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Bones DQ", chunk.inverseRestPoseDQArray != null ? chunk.inverseRestPoseDQArray.Length.ToString() : "null");
-
-            EditorGUI.BeginDisabledGroup(chunk.inverseRestPoseDQArray == null);
-
-            if (GUILayout.Button("Clear"))
-            {
-                chunk.inverseRestPoseDQArray = null;
-
-                EditorUtility.SetDirty(target);
-                AssetDatabase.SaveAssets();
-                AssetDatabase.Refresh();
-            }
-
-            EditorGUI.EndDisabledGroup();
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Vertex Count", chunk.meshData != null? chunk.meshData.Length.ToString(): "null");
-
-            EditorGUI.BeginDisabledGroup(chunk.meshData == null);
-
-            if (GUILayout.Button("Clear"))
-            {
-                chunk.meshData = null;
-
-                EditorUtility.SetDirty(target);
-                AssetDatabase.SaveAssets();
-                AssetDatabase.Refresh();
-            }
-
-            EditorGUI.EndDisabledGroup();
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUI.indentLevel++;
-
-            EditorGUILayout.LabelField("1 bone vertex count", chunk.boneVertexCount.x.ToString());
-            EditorGUILayout.LabelField("2 bone vertex count", chunk.boneVertexCount.y.ToString());
-            EditorGUILayout.LabelField("3 bone vertex count", chunk.boneVertexCount.z.ToString());
-            EditorGUILayout.LabelField("4 bone vertex count", chunk.boneVertexCount.w.ToString());
-
-            EditorGUI.indentLevel--;
-
-            EditorGUILayout.BeginHorizontal();
-            EditorGUILayout.LabelField("Index Count", chunk.indices != null ? chunk.indices.Length.ToString() : "null");
-
-            EditorGUI.BeginDisabledGroup(chunk.indices == null);
-
-            if (GUILayout.Button("Clear"))
-            {
-                chunk.indices = null;
-
-                EditorUtility.SetDirty(target);
-                AssetDatabase.SaveAssets();
-                AssetDatabase.Refresh();
-            }
-
-            EditorGUI.EndDisabledGroup();
-            EditorGUILayout.EndHorizontal();
-
-            EditorGUILayout.LabelField("Each bone vertex count");
-            EditorGUILayout.LabelField(string.Format("1: {0}. 2 : {1}. 3 : {2}. 4 : {3}", chunk.boneVertexCount.x, chunk.boneVertexCount.y, chunk.boneVertexCount.z, chunk.boneVertexCount.w));
-
-            EditorGUI.indentLevel--;
-            EditorGUILayout.Space();
-
-            EditorGUI.BeginDisabledGroup(mesh == null);
-            
-            if (GUILayout.Button(addTitle))
-            {
-                AddData();
-
-                EditorUtility.SetDirty(target);
-                AssetDatabase.SaveAssets();
-                AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(target));
-            }
-
-            if (GUILayout.Button(overrideTitle))
-            {
-                OverrideData();
-
-                EditorUtility.SetDirty(target);
-                AssetDatabase.SaveAssets();
-                AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(target));
-            }
-
-            if (GUILayout.Button(fillTitle))
-            {
-                FillData();
-
-                EditorUtility.SetDirty(target);
-                AssetDatabase.SaveAssets();
-                AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(target));
+                EditorGUI.EndDisabledGroup();
             }
 
             EditorGUILayout.Space();
 
-            if (GUILayout.Button("Clear Data"))
-            {
-                targetAs.Clear();
+            convertedDataToggle = EditorGUILayout.Foldout(convertedDataToggle, "Converted Data");
 
-                EditorUtility.SetDirty(target);
-                AssetDatabase.SaveAssets();
-                AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(target));
+            if (convertedDataToggle)
+            {
+                EditorGUILayout.Space();
+
+                EditorGUI.indentLevel++;
+
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("Root Bone Name", chunk.rootBoneName != null ? chunk.rootBoneName : "null");
+
+                EditorGUI.BeginDisabledGroup(chunk.rootBoneName == null);
+
+                if (GUILayout.Button("Clear"))
+                {
+                    Undo.RecordObject(chunk, "Root Bone Name Clear");
+
+                    chunk.rootBoneName = null;
+
+                    EditorUtility.SetDirty(target);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.Refresh();
+                }
+
+                EditorGUI.EndDisabledGroup();
+                EditorGUILayout.EndHorizontal();
+
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("Indexed Bone Name Array", chunk.indexedBoneNameArray != null ? chunk.indexedBoneNameArray.Length.ToString() : "null");
+
+                EditorGUI.BeginDisabledGroup(chunk.indexedBoneNameArray == null);
+
+                if (GUILayout.Button("Clear"))
+                {
+                    Undo.RecordObject(chunk, "Indexed Bone Name Clear");
+
+                    chunk.indexedBoneNameArray = null;
+
+                    EditorUtility.SetDirty(target);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.Refresh();
+                }
+
+                EditorGUI.EndDisabledGroup();
+                EditorGUILayout.EndHorizontal();
+
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("Bones Matrix", chunk.inverseRestPoseMatrixArray != null ? chunk.inverseRestPoseMatrixArray.Length.ToString() : "null");
+
+                EditorGUI.BeginDisabledGroup(chunk.inverseRestPoseMatrixArray == null);
+
+                if (GUILayout.Button("Clear"))
+                {
+                    Undo.RecordObject(chunk, "Bone Matrix Clear");
+
+                    chunk.inverseRestPoseMatrixArray = null;
+
+                    EditorUtility.SetDirty(target);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.Refresh();
+                }
+
+                EditorGUI.EndDisabledGroup();
+                EditorGUILayout.EndHorizontal();
+
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("Bones DQ", chunk.inverseRestPoseDQArray != null ? chunk.inverseRestPoseDQArray.Length.ToString() : "null");
+
+                EditorGUI.BeginDisabledGroup(chunk.inverseRestPoseDQArray == null);
+
+                if (GUILayout.Button("Clear"))
+                {
+                    Undo.RecordObject(chunk, "Bone DQ Clear");
+
+                    chunk.inverseRestPoseDQArray = null;
+
+                    EditorUtility.SetDirty(target);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.Refresh();
+                }
+
+                EditorGUI.EndDisabledGroup();
+                EditorGUILayout.EndHorizontal();
+
+                EditorGUILayout.BeginHorizontal();
+
+                EditorGUILayout.LabelField("Vertex Count", chunk.meshData != null ? chunk.meshData.Length.ToString() : "null");
+
+                EditorGUI.BeginDisabledGroup(chunk.meshData == null);
+
+                if (GUILayout.Button("Clear"))
+                {
+                    Undo.RecordObject(chunk, "Mesh Data Clear");
+
+                    chunk.meshData = null;
+
+                    EditorUtility.SetDirty(target);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.Refresh();
+                }
+
+                EditorGUI.EndDisabledGroup();
+                EditorGUILayout.EndHorizontal();
+
+                EditorGUI.indentLevel++;
+
+                EditorGUILayout.LabelField("1 bone vertex count", chunk.boneVertexCount.x.ToString());
+                EditorGUILayout.LabelField("2 bone vertex count", chunk.boneVertexCount.y.ToString());
+                EditorGUILayout.LabelField("3 bone vertex count", chunk.boneVertexCount.z.ToString());
+                EditorGUILayout.LabelField("4 bone vertex count", chunk.boneVertexCount.w.ToString());
+
+                EditorGUI.indentLevel--;
+
+                EditorGUILayout.BeginHorizontal();
+                EditorGUILayout.LabelField("Index Count", chunk.indices != null ? chunk.indices.Length.ToString() : "null");
+
+                EditorGUI.BeginDisabledGroup(chunk.indices == null);
+
+                if (GUILayout.Button("Clear"))
+                {
+                    Undo.RecordObject(chunk, "Index Clear");
+
+                    chunk.indices = null;
+
+                    EditorUtility.SetDirty(target);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.Refresh();
+                }
+
+                EditorGUI.EndDisabledGroup();
+                EditorGUILayout.EndHorizontal();
+                
+                EditorGUI.indentLevel--;
+                EditorGUILayout.Space();
+
+                EditorGUI.BeginDisabledGroup(mesh == null);
+
+                if (GUILayout.Button(addTitle))
+                {
+                    Undo.RecordObject(chunk, addTitle);
+
+                    AddMeshData();
+
+                    EditorUtility.SetDirty(target);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(target));
+                }
+
+                if (GUILayout.Button(overrideTitle))
+                {
+                    Undo.RecordObject(chunk, overrideTitle);
+
+                    OverrideMeshData();
+
+                    EditorUtility.SetDirty(target);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(target));
+                }
+
+                if (GUILayout.Button(fillTitle))
+                {
+                    Undo.RecordObject(chunk, fillTitle);
+
+                    FillMeshData();
+
+                    EditorUtility.SetDirty(target);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(target));
+                }
+
+                EditorGUILayout.Space();
+
+                if (GUILayout.Button("Clear Converted Mesh Data"))
+                {
+                    Undo.RecordObject(chunk, "Clear Converted Mesh Data");
+
+                    targetAs.Clear();
+
+                    EditorUtility.SetDirty(target);
+                    AssetDatabase.SaveAssets();
+                    AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(target));
+                }
+
+                EditorGUILayout.Space();
+
+                centerOfRotationDataToggle = EditorGUILayout.Foldout(centerOfRotationDataToggle, "Center Of Rotation");
+
+                if (centerOfRotationDataToggle)
+                {
+                    EditorGUILayout.Space();
+
+                    EditorGUI.indentLevel++;
+
+                    SerializedProperty clusterArrayProperty = serializedObject.FindProperty("clusterArray");
+                    EditorGUILayout.PropertyField(clusterArrayProperty, true);
+
+                    EditorGUILayout.LabelField("Clustered Index Count", chunk.clusteredVertexIndexArray != null ? chunk.clusteredVertexIndexArray.Length.ToString() : "null");
+
+                    EditorGUILayout.Space();
+
+                    distanceThreshold = EditorGUILayout.DelayedFloatField("Distance Threshold", distanceThreshold);
+
+                    EditorGUILayout.Space();
+
+                    if (GUILayout.Button("Calculate Center Of Cluster"))
+                    {
+                        Undo.RecordObject(chunk, "Calculate Center Of Cluster");
+
+                        chunk.CalculateCluster(distanceThreshold);
+
+                        EditorUtility.SetDirty(target);
+                        AssetDatabase.SaveAssets();
+                        AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(target));
+                    }
+
+                    EditorGUI.indentLevel--;
+                }
+
+                EditorGUI.EndDisabledGroup();
             }
 
-            EditorGUI.EndDisabledGroup();
+            EditorGUILayout.Space();
 
-            logSimilarityToggle = EditorGUILayout.Foldout(logSimilarityToggle, "Log similarity");
+            logSimilarityToggle = EditorGUILayout.Foldout(logSimilarityToggle, "Log Similarity and Weight Distance");
 
             if (logSimilarityToggle)
             {
                 EditorGUI.indentLevel++;
+
+                EditorGUILayout.Space();
 
                 cmpIndex1 = EditorGUILayout.IntSlider("Compare Index 1", cmpIndex1, 0, chunk.meshData.Length - 1);
                 cmpIndex2 = EditorGUILayout.IntSlider("Compare Index 2", cmpIndex2, 0, chunk.meshData.Length - 1);
@@ -269,17 +348,37 @@
 
                 EditorGUILayout.Space();
 
-                if (GUILayout.Button("log calculate"))
-                {
-                    Debug.Log(chunk.meshData[cmpIndex1] + ", " + chunk.meshData[cmpIndex2]);
-                    Debug.Log(chunk.GetSimliarity(cmpIndex1, cmpIndex2, simKernel));
-                }
+                EditorGUILayout.LabelField
+                (
+                    "Vertex Weight 1",
+                    String.Format
+                    (
+                        "{0}, {1}",
+                        chunk.meshData[cmpIndex1].index, chunk.meshData[cmpIndex1].weight
+                    )
+                );
+                EditorGUILayout.LabelField
+                (
+                    "Vertex Weight 2",
+                    String.Format
+                    (
+                        "{0}, {1}",
+                        chunk.meshData[cmpIndex2].index, chunk.meshData[cmpIndex2].weight
+                    )
+                );
+
+                EditorGUILayout.Space();
+
+                EditorGUILayout.LabelField("Similarity", chunk.GetSimliarity(cmpIndex1, cmpIndex2, simKernel).ToString());
+                EditorGUILayout.LabelField("Weight distance", chunk.meshData[cmpIndex1].GetWeightDistance(chunk.meshData[cmpIndex2]).ToString());
+
+                EditorGUILayout.Space();
 
                 EditorGUI.indentLevel--;
             }
         }
 
-        public void AddData()
+        public void AddMeshData()
         {
             long time = DateTime.Now.Ticks;
 
@@ -315,7 +414,7 @@
             EditorUtility.ClearProgressBar();
         }
 
-        public void OverrideData()
+        public void OverrideMeshData()
         {
             long time = DateTime.Now.Ticks;
 
@@ -349,7 +448,7 @@
             EditorUtility.ClearProgressBar();
         }
 
-        public void FillData()
+        public void FillMeshData()
         {
             long time = DateTime.Now.Ticks;
 

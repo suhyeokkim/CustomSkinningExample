@@ -91,12 +91,23 @@
         {
             bool* isValidArray = stackalloc bool[8];
             float wholeDistance = 0;
+            bool isCaculationValid = false;
 
             for (int i = 0; i < 4; i++)
             {
                 isValidArray[i] = info1.weight[i] != 0f;
                 isValidArray[i+4] = info2.weight[i] != 0f;
             }
+
+            for (int i = 0; i < 4; i++)
+                for (int j = 0; j < 4; j++)
+                    if (isValidArray[i] && isValidArray[j + 4])
+                    {
+                        if (info2.index[j] == info1.index[i])
+                            isCaculationValid = true;
+                    }
+
+            if (!isCaculationValid) return float.MaxValue;
 
             for (int i = 0; i < 4; i++)
             {
@@ -285,6 +296,10 @@
 
                 return similarity;
             }
+        }
+
+        public static void CalculateCluster(this RenderChunk chunk, float weightDistanceThreshold)
+        {
         }
         
         /*

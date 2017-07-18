@@ -15,7 +15,7 @@
 
         public int this[int idx] {
             get { return idx == 0 ? x : idx == 1 ? y : idx == 2 ? z : idx == 3 ? w : -1; }
-            set { switch (idx) { case 0: x = value; break; case 1: y = value;break; case 2: z = value; break; case 3: w = value; break; } }
+            set { switch (idx) { case 0: x = value; break; case 1: y = value; break; case 2: z = value; break; case 3: w = value; break; } }
         }
 
         public Integer4(int x, int y, int z, int w)
@@ -28,7 +28,7 @@
 
         public override string ToString()
         {
-            return string.Format("({0},{1},{2},{3})",x,y,z,w);
+            return string.Format("({0},{1},{2},{3})", x, y, z, w);
         }
     }
 
@@ -54,9 +54,17 @@
     {
         public Vector4 position;
         public Vector4 normal;
-        
+
         public Vector2 uv;
     };
+
+    [System.Serializable]
+    public struct ClusterData
+    {
+        public int clusterID;
+        public int lengthOfCluster;
+        public int startIndexOfCluster;
+    }
 
     [CreateAssetMenu]
     public class RenderChunk : ScriptableObject
@@ -96,16 +104,16 @@
 
         #region calculate for center of rotation
 
-        // nothing related, maybe related root vertex length
-        public int[] centerOfClusterVertexIndexArray;
-        // related vertex length
-        public int[] centerOfClusterClusterNumberArray;
+        // Need just center of rotation data
+#if UNITY_EDITOR
+        public ClusterData[] clusterArray;
+        public int[] clusteredVertexIndexArray;
+#endif
 
         // Generated position data per vertex
         public Vector3[] centerOfRotationPositionArray;
 
         #endregion
-
         public void Clear()
         {
             rootBoneName = null;
@@ -116,8 +124,6 @@
             indexCounts = null;
             vertexCount = 0;
             meshData = null;
-            centerOfClusterVertexIndexArray = null;
-            centerOfClusterClusterNumberArray = null;
             centerOfRotationPositionArray = null;
         }
 

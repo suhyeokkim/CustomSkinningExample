@@ -3,6 +3,7 @@
     using System;
     using System.Collections;
     using System.Collections.Generic;
+    using System.Text.RegularExpressions;
     using System.Threading;
     using UnityEngine;
 
@@ -147,6 +148,14 @@
             }
 
             return Mathf.Sqrt(wholeDistance);
+        }
+
+        public static float GetArea(this RenderChunk chunk, int vtxIdx1, int vtxIdx2, int vtxIdx3)
+        {
+            Vector3 vec12 = (Vector3)(chunk.meshData[vtxIdx2].position - chunk.meshData[vtxIdx1].position),
+                    vec13 = (Vector3)(chunk.meshData[vtxIdx3].position - chunk.meshData[vtxIdx1].position);
+
+            return Vector3.Cross(vec12, vec13).magnitude * 0.5f;
         }
 
         public static unsafe float GetSimliarity(this RenderChunk chunk, int vtxIdx1, int vtxIdx21, int vtxIdx22, int vtxIdx23, float kernel)
@@ -298,24 +307,191 @@
             }
         }
 
-        public static void CalculateCluster(this RenderChunk chunk, float weightDistanceThreshold)
+        public static IEnumerator<int> CalculateCluster(this RenderChunk chunk, float weightDistanceThreshold)
         {
+            bool[] checkCalculateTriangle = new bool[chunk.indices.Length];
+            List<int> triangleIndexList = new List<int>();
+
+            bool[] checkCalculateVertex = new bool[chunk.vertexCount];
+            int nextClusterID = 0;
+            List<ClusterData> clusterDataList = new List<ClusterData>();
+            List<int> indexList = new List<int>();
+            Queue<int> processVertexIndexQueue = new Queue<int>();
+            int numberOfCalculatedVertices = 0;
+
+            for (int iterateVertexIndex = 0; iterateVertexIndex < checkCalculateVertex.Length; iterateVertexIndex++) // long
+            {
+                if (!checkCalculateVertex[iterateVertexIndex])
+                {
+                    List<int> vertexIndexList = new List<int>();
+                    List<int> tempTriangleIndexList = new List<int>();
+
+                    vertexIndexList.Add(iterateVertexIndex);
+                    checkCalculateVertex[iterateVertexIndex] = true;
+                    numberOfCalculatedVertices++;
+
+                    processVertexIndexQueue.Enqueue(iterateVertexIndex);
+
+                    while (processVertexIndexQueue.Count > 0)
+                    {
+                        int processVertexIndex = processVertexIndexQueue.Dequeue(), findVertexIndex = 0;
+
+                        for (int i = 0; i < chunk.indices.Length; i++)
+                        {
+                            if (chunk.indices[i] == processVertexIndex)
+                            {
+                                findVertexIndex = i;
+                                int triangleIndex = findVertexIndex / 3;
+
+                                if (!checkCalculateTriangle[triangleIndex])
+                                {
+                                    checkCalculateTriangle[triangleIndex] = true;
+                                    tempTriangleIndexList.Add(triangleIndex);
+                                }
+
+                                for (int j = 0; j < 3; j++)
+                                {
+                                    int nextIndex = chunk.indices[triangleIndex * 3 + j];
+
+                                    if (chunk.indices[nextIndex] != findVertexIndex && !checkCalculateVertex[nextIndex])
+                                        if (chunk.meshData[processVertexIndex].GetWeightDistance(chunk.meshData[nextIndex]) <= weightDistanceThreshold)
+                                        {
+                                            numberOfCalculatedVertices++;
+                                            checkCalculateVertex[nextIndex] = true;
+                                            vertexIndexList.Add(nextIndex);
+                                            processVertexIndexQueue.Enqueue(nextIndex);
+                                        }
+                                }
+                            }
+                        }
+                    }
+
+                    clusterDataList.Add(
+                            new ClusterData()
+                            {
+                                clusterID = nextClusterID,
+
+                                startIndexOfCluster = indexList.Count,
+                                lengthOfCluster = vertexIndexList.Count,
+
+                                startIndexOfTriangles = triangleIndexList.Count,
+                                lengthOfTriangles = tempTriangleIndexList.Count
+                            }
+                        );
+                    indexList.AddRange(vertexIndexList);
+                    triangleIndexList.AddRange(tempTriangleIndexList);
+
+                    nextClusterID++;
+                    yield return numberOfCalculatedVertices;
+                }
+            }
+
+            chunk.clusterArray = clusterDataList.ToArray();
+            chunk.clusteredVertexIndexArray = indexList.ToArray();
+            chunk.clusteredTriangleIndexArray = triangleIndexList.ToArray();
         }
-        
-        /*
-         * Approximate nearest neighbor search
-         * 1. WeightIndex, WeightWeight 가 기준인 skinning weight space 에서 maximized minimum distance point set 을 계산하여 몇개의 정점을 뽑아서 저장함. 
-         *    계산된 Weight들은 비슷한 Weight 의 반복을 피하기 위하여 대표로 뽑힌 Weight임. 또한 같은 Weight 를 가지면 같은 cluster 로 취급함.
-         * 2. 계산된 정점으로 ||Wi - Wj||2 < ω 식을 계산하여 ANN 을 실행함. 앞의 식은 Weight 사이의 차이를 나타내므로 작으면 작을수록 가깝다는 뜻임. 즉 가까우면 계속 진행하는 구문. 
-         * 
-         * Smooth skinning weights assumption 
-         * BFS 로 인덱스 버퍼를 그래프의 가중치로 취급하여 탐색함. 판단 구문은 Similarity < ε 이면 탐색을 멈춘다. ε 는 정해준 threshold 임.
-         * 
-         * Parallel implementation
-         * 병렬 구현.. GPGPU 나 Multi-thread 로 구현해야함. Multi-thread 는 .Net 으로 하면됨. GPGPU 는 몰라 ㅅㅂ 
-         */
-        public static void CalculateCenterOfRotation(this RenderChunk chunk, Mesh mesh, float similarityKernel, float limitWeightDistance, float similarityThresholds)
+
+        public const string threadNameRegexPattern = "Thread(.+)_(.+)";
+        public const string threadNameFormat = "Thread{0:D4}_{1:D4}";
+
+        public struct ProcessThreadState
         {
+            public bool done;
+            public bool fail;
+            public int processCount;
+        }
+
+        public static ProcessThreadState[] CalculateCenterOfRotation(this RenderChunk chunk, int maxThreadNumber, float similarityKernel, float similarityThreshold)
+        {
+            if(chunk.clusterArray == null || chunk.clusteredVertexIndexArray == null)
+            {
+                Debug.LogError("Must need pre-calculated Center Of Clusters");
+                return null;
+            }
+
+            ProcessThreadState[] processStateArray = new ProcessThreadState[maxThreadNumber];
+
+            chunk.centerOfRotationPositionArray = new Vector3[chunk.meshData.Length];
+
+            System.Threading.ParameterizedThreadStart CoRProcessStart = 
+                (threadObj) =>
+                {
+                    Thread thread = threadObj as Thread;
+                    Match match = Regex.Match(thread.Name, threadNameRegexPattern);
+
+                    int currentThreadNum = int.Parse(match.Groups[1].Value), maximumThreadNum = int.Parse(match.Groups[2].Value),
+                        vertexLegnth = chunk.meshData.Length;
+                    
+                    try
+                    {
+                        for (int clusterIndex = currentThreadNum; clusterIndex < chunk.clusterArray.Length; clusterIndex += maximumThreadNum) 
+                        {
+                            ClusterData currentCluster = chunk.clusterArray[clusterIndex];
+
+                            for (int clusterVertexIndex = currentCluster.startIndexOfCluster; clusterVertexIndex < currentCluster.startIndexOfCluster + currentCluster.lengthOfCluster; clusterVertexIndex++)
+                            {
+                                int vertexIndex = chunk.clusteredVertexIndexArray[clusterVertexIndex];
+
+                                Vector3 calculatedVertex = Vector3.zero;
+                                float sumedSimiliarity = 0f;
+
+                                for (int clusterTriangleIndex = currentCluster.startIndexOfTriangles; clusterTriangleIndex < currentCluster.startIndexOfTriangles + currentCluster.lengthOfTriangles; clusterTriangleIndex++)
+                                {
+                                    int triangleIndex = chunk.clusteredTriangleIndexArray[clusterTriangleIndex];
+                                    
+                                    float similarity = 
+                                        chunk.GetSimliarity(
+                                            vertexIndex,
+                                            chunk.indices[triangleIndex * 3 + 0],
+                                            chunk.indices[triangleIndex * 3 + 1],
+                                            chunk.indices[triangleIndex * 3 + 2],
+                                            similarityKernel
+                                        );
+
+                                    if (similarity < similarityThreshold)
+                                        continue;
+
+                                    float area = chunk.GetArea(
+                                            chunk.indices[triangleIndex * 3 + 0], 
+                                            chunk.indices[triangleIndex * 3 + 1], 
+                                            chunk.indices[triangleIndex * 3 + 2]
+                                        );
+
+                                    calculatedVertex += 
+                                        (Vector3)(
+                                            chunk.meshData[chunk.indices[triangleIndex * 3 + 0]].position +
+                                            chunk.meshData[chunk.indices[triangleIndex * 3 + 1]].position +
+                                            chunk.meshData[chunk.indices[triangleIndex * 3 + 2]].position
+                                        ) / 3 *
+                                        area * similarity;
+                                    sumedSimiliarity += area * similarity;
+                                }
+
+                                chunk.centerOfRotationPositionArray[vertexIndex] = calculatedVertex / sumedSimiliarity;
+                                processStateArray[currentThreadNum].processCount++;
+                            }
+                        }
+
+                        processStateArray[currentThreadNum].done = true;
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogError(e);
+                        Debug.LogError(e.Source);
+                        Debug.LogError(e.Message);
+
+                        processStateArray[currentThreadNum].fail = true;
+                    }
+                };
+
+            for (int i = 0; i < maxThreadNumber; i++)
+            {
+                Thread thread = new Thread(CoRProcessStart);
+                thread.Name = String.Format(threadNameFormat, i, maxThreadNumber);
+                thread.Start(thread);
+            }
+
+            return processStateArray;
         }
     }
 }

@@ -62,8 +62,12 @@
     public struct ClusterData
     {
         public int clusterID;
+
         public int lengthOfCluster;
         public int startIndexOfCluster;
+
+        public int lengthOfTriangles;
+        public int startIndexOfTriangles;
     }
 
     [CreateAssetMenu]
@@ -106,8 +110,15 @@
 
         // Need just center of rotation data
 #if UNITY_EDITOR
+        public float distanceThreshold = 1;
+
         public ClusterData[] clusterArray;
         public int[] clusteredVertexIndexArray;
+        public int[] clusteredTriangleIndexArray;
+
+        public int calculateThreadNumber = 8;
+        public float similarityKernel = 0.5f;
+        public float similarityThreshold = 0.05f;
 #endif
 
         // Generated position data per vertex

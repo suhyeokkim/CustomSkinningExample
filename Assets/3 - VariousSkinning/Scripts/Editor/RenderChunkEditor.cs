@@ -37,6 +37,8 @@
         float distanceThreshold = 1;
 
         bool clusterDataToggle = false;
+        float similarityKernel = 0.5f;
+        float similarityThreshold = 0.05f;
 
         private void OnEnable()
         {
@@ -45,6 +47,8 @@
 
         public override void OnInspectorGUI()
         {
+            serializedObject.Update();
+
             EditorGUI.BeginDisabledGroup(true);
 
             EditorGUILayout.ObjectField("Script", MonoScript.FromScriptableObject(targetAs), typeof(RenderChunk), false);
@@ -307,7 +311,8 @@
                     SerializedProperty clusterArrayProperty = serializedObject.FindProperty("clusterArray");
                     EditorGUILayout.PropertyField(clusterArrayProperty, true);
 
-                    EditorGUILayout.LabelField("Clustered Index Count", chunk.clusteredVertexIndexArray != null ? chunk.clusteredVertexIndexArray.Length.ToString() : "null");
+                    EditorGUILayout.LabelField("Clustered Vertex Index Count", chunk.clusteredVertexIndexArray != null ? chunk.clusteredVertexIndexArray.Length.ToString() : "null");
+                    EditorGUILayout.LabelField("Clustered Index Index Count", chunk.clusteredTriangleIndexArray != null ? chunk.clusteredTriangleIndexArray.Length.ToString() : "null");
 
                     EditorGUILayout.Space();
 
@@ -319,13 +324,63 @@
                     {
                         Undo.RecordObject(chunk, "Calculate Center Of Cluster");
 
-                        chunk.CalculateCluster(distanceThreshold);
+                        IEnumerator<int> enumer = chunk.CalculateCluster(distanceThreshold);
+                        DateTime startTime = DateTime.Now;
+
+                        while (enumer.MoveNext())
+                            EditorUtility.DisplayProgressBar("Calculate Center Of Cluster", enumer.Current.ToString(), (float)enumer.Current / chunk.vertexCount);
+
+                        EditorUtility.ClearProgressBar();
+
+                        Debug.Log(String.Format("Time : {0}", ((double)(DateTime.Now - startTime).Ticks / TimeSpan.TicksPerSecond)));
 
                         EditorUtility.SetDirty(target);
                         AssetDatabase.SaveAssets();
                         AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(target));
                     }
 
+                    EditorGUILayout.Space();
+
+                    SerializedProperty calculateThreadNumberProperty = serializedObject.FindProperty("calculateThreadNumber");
+                    EditorGUILayout.PropertyField(calculateThreadNumberProperty);
+
+                    SerializedProperty similarityKernelProperty = serializedObject.FindProperty("similarityKernel");
+                    EditorGUILayout.PropertyField(similarityKernelProperty);
+
+                    SerializedProperty similarityThresholdProperty = serializedObject.FindProperty("similarityThreshold");
+                    EditorGUILayout.PropertyField(similarityThresholdProperty);
+
+                    EditorGUILayout.Space();
+
+                    EditorGUILayout.LabelField("Center Of Rotation", chunk.centerOfRotationPositionArray != null ? chunk.centerOfRotationPositionArray.Length.ToString() : "null");
+
+                    EditorGUILayout.Space();
+
+                    if (GUILayout.Button("Calculate Center Of Rotation Position"))
+                    {
+                        Undo.RecordObject(chunk, "Calculate Center Of Rotation Position");
+
+                        RenderChunkHandler.ProcessThreadState[] stateArray = chunk.CalculateCenterOfRotation(chunk.calculateThreadNumber, similarityKernel, similarityThreshold);
+
+                        if (stateArray != null)
+                        {
+                            while (!Array.TrueForAll(stateArray, (state) => state.done || state.fail))
+                            {
+                                int number = 0;
+                                for (int i = 0; i < stateArray.Length; i++)
+                                    number += stateArray[i].processCount;
+                                
+                                EditorUtility.DisplayProgressBar("Calculate Center Of Rotation Position", "Vertex number", (float)number / chunk.meshData.Length);
+                            }
+
+                            EditorUtility.ClearProgressBar();
+                            
+                            EditorUtility.SetDirty(target);
+                            AssetDatabase.SaveAssets();
+                            AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(target));
+                        }
+                    }
+                    
                     EditorGUI.indentLevel--;
                 }
 
@@ -376,6 +431,8 @@
 
                 EditorGUI.indentLevel--;
             }
+
+            serializedObject.ApplyModifiedProperties();
         }
 
         public void AddMeshData()

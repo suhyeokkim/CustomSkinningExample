@@ -139,9 +139,9 @@
     /// This class implementation is depend on ComputeShader.
     /// if you change computeShader source, Have to change this class implementation.
     /// 
-    /// boneWeightPerVertexBuffer : source bone index, weight from UnityEngine.Mesh
     /// boneCurrentPoseMatrixBuffer : current pose transformation matrix from UnityEngine.Transform
-    /// boneRestPoseMatrixBuffer : rest pose inverse transformation matrix from RuntimeRenderChunk.restPoseBoneInverseMatrix
+    /// boneRestPoseMatrixBuffer : rest pose inverse transformation matrix from RenderChunk.restPoseBoneInverseMatrix
+    /// 
     /// getMeshDataBuffer : get data from outside, source vetices, normals, uvs(compatibility for renderer)
     /// getMeshDataStream : get data from outside, converted vertices, normals, uvs(compatibility for renderer)
     /// </summary>
@@ -160,9 +160,7 @@
 
         public ComputeBuffer boneCurrentPoseMatrixBuffer;
         public ComputeBuffer boneRestPoseMatrixBuffer;
-
-        //public ComputeBuffer boneWeightPerVertexBuffer;
-
+        
         // data caching..
         public Transform[] bones;
         public Matrix4x4[] currentPoseMatrixArray;
@@ -218,7 +216,6 @@
     /// 
     /// boneRestPoseDQBuffer : source bone index, weight from UnityEngine.Mesh
     /// boneCurrentPoseDQBuffer : current pose transformation dual quaternion from UnityEngine.Transform
-    /// boneRestPoseMatrixBuffer : rest pose inverse transformation matrix from RuntimeRenderChunk.restPoseBoneInverseMatrix
     /// 
     /// getMeshDataBuffer : get data from outside, source vetices, normals, uvs(compatibility for renderer)
     /// getMeshDataStream : get data from outside, converted vertices, normals, uvs(compatibility for renderer)
@@ -286,7 +283,22 @@
     }
 
     /// <summary>
-    /// IDLE
+    /// Compute realtime skinning.
+    /// This class will implement Optimized Center Of Rotation Skinning.
+    /// 
+    /// This class implementation is depend on ComputeShader.
+    /// if you change computeShader source, Have to change this class implementation.
+    /// 
+    /// boneCurrentPoseMatrixBuffer : current pose transformation matrix from UnityEngine.Transform
+    /// boneRestPoseMatrixBuffer : rest pose inverse transformation matrix from RenderChunk.restPoseBoneInverseMatrix
+    /// 
+    /// boneCurrentPoseRotationBuffer : current pose rotation qutaernion from UnityEngine.Transform
+    /// boneRestPoseRotationBuffer : rest pose inverse rotation qutaernion from RenderChunk.restPoesBoneInverseRotation
+    /// 
+    /// vertexCenterOfRotationBuffer : center of rotation data from RenderChunk.centerOfRotationPositionArray
+    /// 
+    /// getMeshDataBuffer : get data from outside, source vetices, normals, uvs(compatibility for renderer)
+    /// getMeshDataStream : get data from outside, converted vertices, normals, uvs(compatibility for renderer)
     /// </summary>
     public class OptimizedCenterOfRotationSkinningDispatcher : IDisposableDispatch
     {

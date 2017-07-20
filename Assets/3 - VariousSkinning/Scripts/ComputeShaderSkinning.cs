@@ -20,7 +20,7 @@
                     return new LinearBlendSkinningDispatcher(computeShader, chunk, bones, getMeshDataBuffer, getMeshDataStream);
                 case SkinningMethod.DualQuaternion:
                     return new DualQuaternionBlendSkinningDispatcher(computeShader, chunk, bones, getMeshDataBuffer, getMeshDataStream);
-                case SkinningMethod.OpimizedCenterOfRoation:
+                case SkinningMethod.OptimizedCenterOfRotation:
                     return new OptimizedCenterOfRotationSkinningDispatcher(computeShader, chunk, bones, getMeshDataBuffer, getMeshDataStream);
                 default:
                     return null;
@@ -56,10 +56,25 @@
             dispatchcer = ComputeShaderSkinningDispatcherFactory.CreateComputeBy(method, computeShader, chunk, bones, () => { return meshDataBuffer; }, () => { return meshDataStream; });
 
             renderer = new ComputeShaderRenderer(chunk, material, () => { return meshDataStream; });
+
+            dataInfo = new MeshDataInfo[chunk.meshData.Length];
         }
+
+        MeshDataInfo[] dataInfo = null;
 
         public void Update()
         {
+            if (Input.GetKeyUp(KeyCode.A))
+            {
+                meshDataStream.GetData(dataInfo);
+
+                StringBuilder builder = new StringBuilder();
+
+                Array.ForEach(dataInfo, (data) => { builder.Append(data.position).Append("\n"); });
+
+                Debug.Log(builder.ToString());
+            }
+
             if (Input.GetKey(KeyCode.Space))
             {
                 sourceDispatcher.Dispatch();
@@ -287,18 +302,51 @@
         public ComputeShader computeShader;
 
         public Transform[] bones;
+        public Matrix4x4[] currentPoseMatrixArray;
+        public Quaternion[] currentPoseRotationQuatArray;
+
+        public ComputeBuffer boneCurrentPoseMatrixBuffer;
+        public ComputeBuffer boneRestPoseMatrixBuffer;
+
+        public ComputeBuffer boneCurrentPoseRotationQuatBuffer;
+        public ComputeBuffer boneRestPoseRotationQuatBuffer;
+
+        public ComputeBuffer vertexCenterOfRotationBuffer;
 
         public OptimizedCenterOfRotationSkinningDispatcher(ComputeShader computeShader, RenderChunk chunk, Transform[] bones, Func<ComputeBuffer> getMeshDataBuffer, Func<ComputeBuffer> getMeshDataStream)
         {
             this.computeShader = computeShader;
-            kernelIndex = computeShader.FindKernel("OpimizedCenterOfRoationCompute");
+            kernelIndex = computeShader.FindKernel("OptimizedCenterOfRotationCompute");
             computeShader.GetKernelThreadGroupSizes(kernelIndex, out maxThreadSizeX, out maxThreadSizeY, out maxThreadSizeZ);
 
             vertexCount = chunk.vertexCount;
 
             this.bones = bones;
+            currentPoseMatrixArray = new Matrix4x4[bones.Length];
+            currentPoseRotationQuatArray = new Quaternion[bones.Length];
+
+            boneRestPoseMatrixBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(Matrix4x4)));
+            boneCurrentPoseMatrixBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(Matrix4x4)));
+
+            boneRestPoseRotationQuatBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(Quaternion)));
+            boneCurrentPoseRotationQuatBuffer = new ComputeBuffer(bones.Length, Marshal.SizeOf(typeof(Quaternion)));
+
+            vertexCenterOfRotationBuffer = new ComputeBuffer(chunk.vertexCount, Marshal.SizeOf(typeof(Vector3)));
+
+            boneRestPoseMatrixBuffer.SetData(chunk.inverseRestPoseMatrixArray);
+            boneRestPoseRotationQuatBuffer.SetData(chunk.inverseRestPoseRotationArray);
+
+            vertexCenterOfRotationBuffer.SetData(chunk.centerOfRotationPositionArray);
 
             computeShader.SetInt("vertexCount", vertexCount);
+
+            computeShader.SetBuffer(kernelIndex, "currentPoseMatrixBuffer", boneCurrentPoseMatrixBuffer);
+            computeShader.SetBuffer(kernelIndex, "restPoseMatrixBuffer", boneRestPoseMatrixBuffer);
+
+            computeShader.SetBuffer(kernelIndex, "currentPoseRotationBuffer", boneCurrentPoseRotationQuatBuffer);
+            computeShader.SetBuffer(kernelIndex, "restPoseRotationBuffer", boneRestPoseRotationQuatBuffer);
+
+            computeShader.SetBuffer(kernelIndex, "centerOfRotationBuffer", vertexCenterOfRotationBuffer);
 
             computeShader.SetBuffer(kernelIndex, "meshBuffer", getMeshDataBuffer());
             computeShader.SetBuffer(kernelIndex, "meshStream", getMeshDataStream());
@@ -306,11 +354,25 @@
 
         public void Dispatch()
         {
+            for (int i = 0; i < currentPoseMatrixArray.Length; i++)
+            {
+                currentPoseMatrixArray[i] = bones[i].localToWorldMatrix;
+                currentPoseRotationQuatArray[i] = bones[i].rotation;
+            }
+
+            boneCurrentPoseMatrixBuffer.SetData(currentPoseMatrixArray);
+            boneCurrentPoseRotationQuatBuffer.SetData(currentPoseRotationQuatArray);
+
             computeShader.Dispatch(kernelIndex, (int)(vertexCount / (long)maxThreadSizeX + 1), 1, 1);
         }
 
         public void Dispose()
         {
+            boneRestPoseMatrixBuffer.Dispose();
+            boneCurrentPoseMatrixBuffer.Dispose();
+
+            boneRestPoseRotationQuatBuffer.Dispose();
+            boneCurrentPoseRotationQuatBuffer.Dispose();
         }
     }
     /// <summary>

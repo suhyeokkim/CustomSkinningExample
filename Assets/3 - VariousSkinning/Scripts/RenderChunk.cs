@@ -90,7 +90,6 @@
         public Matrix4x4[] inverseRestPoseMatrixArray;
 
         public Quaternion[] inverseRestPoseRotationArray;
-        public Vector3[] inverseRestPoseTranslateArray;
 
         #endregion
 

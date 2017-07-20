@@ -18,7 +18,7 @@
     {
         Linear,
         DualQuaternion,
-        OpimizedCenterOfRoation,
+        OptimizedCenterOfRotation,
     }
 
     public enum SkinningSelector

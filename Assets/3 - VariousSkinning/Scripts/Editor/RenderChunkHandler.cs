@@ -22,6 +22,7 @@
 
             chunk.inverseRestPoseMatrixArray = Array.ConvertAll(renderer.bones, (bone) => bone.worldToLocalMatrix);
             chunk.inverseRestPoseDQArray = Array.ConvertAll(renderer.bones, (bone) => bone.GetWorldToLocalDQ());
+            chunk.inverseRestPoseRotationArray = Array.ConvertAll(renderer.bones, (bone) => Quaternion.Inverse(bone.rotation));
         }
 
         public static void SetMeshData(this Mesh mesh, RenderChunk chunk)
@@ -394,14 +395,15 @@
         public const string threadNameRegexPattern = "Thread(.+)_(.+)";
         public const string threadNameFormat = "Thread{0:D4}_{1:D4}";
 
-        public struct ProcessThreadState
+        public struct CoRProcessThreadState
         {
             public bool done;
             public bool fail;
             public int processCount;
+            public int emptyCount;
         }
 
-        public static ProcessThreadState[] CalculateCenterOfRotation(this RenderChunk chunk, int maxThreadNumber, float similarityKernel, float similarityThreshold)
+        public static CoRProcessThreadState[] CalculateCenterOfRotation(this RenderChunk chunk, int maxThreadNumber, float similarityKernel, float similarityThreshold)
         {
             if(chunk.clusterArray == null || chunk.clusteredVertexIndexArray == null)
             {
@@ -409,7 +411,7 @@
                 return null;
             }
 
-            ProcessThreadState[] processStateArray = new ProcessThreadState[maxThreadNumber];
+            CoRProcessThreadState[] processStateArray = new CoRProcessThreadState[maxThreadNumber];
 
             chunk.centerOfRotationPositionArray = new Vector3[chunk.meshData.Length];
 
@@ -467,7 +469,16 @@
                                     sumedSimiliarity += area * similarity;
                                 }
 
-                                chunk.centerOfRotationPositionArray[vertexIndex] = calculatedVertex / sumedSimiliarity;
+                                if (sumedSimiliarity > 0)
+                                {
+                                    chunk.centerOfRotationPositionArray[vertexIndex] = calculatedVertex / sumedSimiliarity;
+                                }
+                                else
+                                {
+                                    chunk.centerOfRotationPositionArray[vertexIndex] = chunk.meshData[vertexIndex].position;
+                                    processStateArray[currentThreadNum].emptyCount++;
+                                }
+
                                 processStateArray[currentThreadNum].processCount++;
                             }
                         }

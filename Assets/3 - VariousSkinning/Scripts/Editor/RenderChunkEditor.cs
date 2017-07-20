@@ -143,53 +143,19 @@
                 EditorGUILayout.EndHorizontal();
 
                 EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField("Indexed Bone Name Array", chunk.indexedBoneNameArray != null ? chunk.indexedBoneNameArray.Length.ToString() : "null");
-
-                EditorGUI.BeginDisabledGroup(chunk.indexedBoneNameArray == null);
-
-                if (GUILayout.Button("Clear"))
-                {
-                    Undo.RecordObject(chunk, "Indexed Bone Name Clear");
-
-                    chunk.indexedBoneNameArray = null;
-
-                    EditorUtility.SetDirty(target);
-                    AssetDatabase.SaveAssets();
-                    AssetDatabase.Refresh();
-                }
-
-                EditorGUI.EndDisabledGroup();
-                EditorGUILayout.EndHorizontal();
-
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField("Bones Matrix", chunk.inverseRestPoseMatrixArray != null ? chunk.inverseRestPoseMatrixArray.Length.ToString() : "null");
+                EditorGUILayout.LabelField("Each Bones Data", chunk.inverseRestPoseMatrixArray != null ? chunk.inverseRestPoseMatrixArray.Length.ToString() : "null");
 
                 EditorGUI.BeginDisabledGroup(chunk.inverseRestPoseMatrixArray == null);
 
                 if (GUILayout.Button("Clear"))
                 {
-                    Undo.RecordObject(chunk, "Bone Matrix Clear");
+                    Undo.RecordObject(chunk, "Bone Transform Data Clear");
+
+                    chunk.indexedBoneNameArray = null;
 
                     chunk.inverseRestPoseMatrixArray = null;
-
-                    EditorUtility.SetDirty(target);
-                    AssetDatabase.SaveAssets();
-                    AssetDatabase.Refresh();
-                }
-
-                EditorGUI.EndDisabledGroup();
-                EditorGUILayout.EndHorizontal();
-
-                EditorGUILayout.BeginHorizontal();
-                EditorGUILayout.LabelField("Bones DQ", chunk.inverseRestPoseDQArray != null ? chunk.inverseRestPoseDQArray.Length.ToString() : "null");
-
-                EditorGUI.BeginDisabledGroup(chunk.inverseRestPoseDQArray == null);
-
-                if (GUILayout.Button("Clear"))
-                {
-                    Undo.RecordObject(chunk, "Bone DQ Clear");
-
                     chunk.inverseRestPoseDQArray = null;
+                    chunk.inverseRestPoseRotationArray = null;
 
                     EditorUtility.SetDirty(target);
                     AssetDatabase.SaveAssets();
@@ -221,10 +187,10 @@
 
                 EditorGUI.indentLevel++;
 
-                EditorGUILayout.LabelField("1 bone vertex count", chunk.boneVertexCount.x.ToString());
-                EditorGUILayout.LabelField("2 bone vertex count", chunk.boneVertexCount.y.ToString());
-                EditorGUILayout.LabelField("3 bone vertex count", chunk.boneVertexCount.z.ToString());
-                EditorGUILayout.LabelField("4 bone vertex count", chunk.boneVertexCount.w.ToString());
+                EditorGUILayout.LabelField("1 Bone", chunk.boneVertexCount.x.ToString());
+                EditorGUILayout.LabelField("2 Bone", chunk.boneVertexCount.y.ToString());
+                EditorGUILayout.LabelField("3 Bone", chunk.boneVertexCount.z.ToString());
+                EditorGUILayout.LabelField("4 Bone", chunk.boneVertexCount.w.ToString());
 
                 EditorGUI.indentLevel--;
 
@@ -356,22 +322,41 @@
 
                     EditorGUILayout.Space();
 
+                    if (GUILayout.Button("Log vertices"))
+                    {
+                        System.Text.StringBuilder builder = new System.Text.StringBuilder();
+
+                        Array.ForEach(chunk.centerOfRotationPositionArray, (cor) => { builder.Append(cor.ToString("F4")).Append("\n"); });
+
+                        Debug.Log(builder.ToString());
+                    }
+                    
                     if (GUILayout.Button("Calculate Center Of Rotation Position"))
                     {
                         Undo.RecordObject(chunk, "Calculate Center Of Rotation Position");
 
-                        RenderChunkHandler.ProcessThreadState[] stateArray = chunk.CalculateCenterOfRotation(chunk.calculateThreadNumber, similarityKernel, similarityThreshold);
+                        RenderChunkHandler.CoRProcessThreadState[] stateArray = chunk.CalculateCenterOfRotation(chunk.calculateThreadNumber, similarityKernel, similarityThreshold);
 
                         if (stateArray != null)
                         {
                             while (!Array.TrueForAll(stateArray, (state) => state.done || state.fail))
                             {
-                                int number = 0;
+                                int sumedProcessCount = 0;
                                 for (int i = 0; i < stateArray.Length; i++)
-                                    number += stateArray[i].processCount;
+                                    sumedProcessCount += stateArray[i].processCount;
                                 
-                                EditorUtility.DisplayProgressBar("Calculate Center Of Rotation Position", "Vertex number", (float)number / chunk.meshData.Length);
+                                EditorUtility.DisplayProgressBar(
+                                        "Calculate Center Of Rotation Position", 
+                                        String.Format("Processed vertex number : {0}", sumedProcessCount), 
+                                        (float)sumedProcessCount / chunk.meshData.Length
+                                    );
                             }
+
+                            int emptyCount = 0;
+                            for (int i = 0; i < stateArray.Length; i++)
+                                emptyCount += stateArray[i].emptyCount;
+
+                            Debug.LogFormat("Calculated similarity count : {0}, empty similarity count : {1}", chunk.meshData.Length - emptyCount, emptyCount);
 
                             EditorUtility.ClearProgressBar();
                             

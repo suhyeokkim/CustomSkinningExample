@@ -1,4 +1,4 @@
-## VariousSkinning Example
+## CustomSkinningExample
 
 custom skinned mesh renderer in Unity. 
 

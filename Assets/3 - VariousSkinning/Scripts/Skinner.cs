@@ -25,7 +25,6 @@
     {
         Auto,
         ForceGPGPU,
-        ForceGPU,
         ForceCPU,
     }
 
@@ -62,8 +61,6 @@
                         disposable = computeAdapter as IDisposable;
                     }
                     break;
-                case SkinningSelector.ForceGPU:
-                    throw new ArgumentOutOfRangeException("SkinningSelector selector", "GPU Skinning not support.");
                 case SkinningSelector.ForceCPU:
                     {
                         DefaultSkinningAdapter defaultAdapter = new DefaultSkinningAdapter(method, chunk, chunk.GetBones(transform.parent), material);

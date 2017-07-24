@@ -1,5 +1,7 @@
 ﻿CGPROGRAM
 
+#include <DataDefination.cginc>
+
 #pragma kernel LinearBlendCompute
 #pragma kernel DualQuaternionBlendCompute
 #pragma kernel OptimizedCenterOfRotationCompute
@@ -8,39 +10,14 @@
 
 // Start of Linear Blend Skinning
 /*
- *  per-vertex data layout
- */
-struct VertexInfo
-{
-    float4 position;
-    float4 normal;
-
-    float4 weight;
-    int4 index;
-    
-    float2 uv;
-};
-
-/*
- *  render data per vertex
- */
-struct RenderData
-{
-    float4 position;
-    float4 normal;
-
-    float2 uv;
-};
-
-/*
- *  Mesh source and bone weights and index
- */
+*  Mesh source and bone weights and index
+*/
 StructuredBuffer<VertexInfo> meshBuffer;
 //StructuredBuffer<BoneInfoPerVertex> boneInfoBuffer;
 
 /*
- *  Converted mesh data;
- */
+*  Converted mesh data;
+*/
 RWStructuredBuffer<RenderData> meshStream;
 
 /*
@@ -64,7 +41,7 @@ inline float4x4 GetRestPoseMatrix(int boneIndex)
     return restPoseMatrixBuffer[boneIndex];
 }
 
-#define MAX_THREAD_ID 512
+#define MAX_THREAD_ID 1024	
 
 [numthreads(MAX_THREAD_ID, 1, 1)]
 void LinearBlendCompute(uint3 threadID : SV_DispatchThreadID)
@@ -339,6 +316,7 @@ void OptimizedCenterOfRotationCompute(uint3 threadID : SV_DispatchThreadID)
 	}
 }
 
+// This computation kernel just copy source data
 [numthreads(MAX_THREAD_ID, 1, 1)]
 void DataToDataCompute(uint3 threadID : SV_DispatchThreadID)
 {

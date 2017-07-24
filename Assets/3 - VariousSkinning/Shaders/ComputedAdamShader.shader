@@ -21,14 +21,7 @@
 			#pragma fragment frag
 			
 			#include "UnityCG.cginc"
-
-			struct RenderData
-			{
-				float4 position;
-				float4 normal;
-
-				float2 uv;
-			};
+			#include "DataDefination.cginc"
 
 			struct v2f
 			{

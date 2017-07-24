@@ -10,8 +10,6 @@ Shader "Custom/ComputedBaseMaleShader"
 	{
 		Pass
 		{
-			Cull Back
-
 			CGPROGRAM
 
 			#pragma target 5.0
@@ -21,15 +19,8 @@ Shader "Custom/ComputedBaseMaleShader"
 			
 			#include "UnityCG.cginc"
 			#include "Lighting.cginc"
-
-			struct RenderData
-			{
-				float4 position;
-				float4 normal;
-
-				float2 uv;
-			};
-
+			#include "DataDefination.cginc"
+	
 			struct v2f
 			{
 				float4 vertex : SV_POSITION;

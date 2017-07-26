@@ -1,10 +1,9 @@
-﻿// Upgrade NOTE: replaced '_World2Object' with 'unity_WorldToObject'
-
-Shader "Custom/ComputedBaseMaleShader"
+﻿Shader "Custom/ComputedBaseMaleShader"
 {
 	Properties
 	{
 		_Color("Base Color", Color) = (1,1,1,1)
+		_WrapLight("Wrap Light", Range(0.0, 1.0)) = 0.5
 	}
 	SubShader
 	{
@@ -25,20 +24,11 @@ Shader "Custom/ComputedBaseMaleShader"
 			{
 				float4 vertex : SV_POSITION;
 				float3 normal : NORMAL;
-				float3 uv : TEXCOORD0;
+				float2 uv : TEXCOORD0;
 			};
 			
 			uniform StructuredBuffer<int> triangles;
 			uniform StructuredBuffer<RenderData> vertices;
-
-			uniform StructuredBuffer<uint> triCountPerTextureIndex;
-
-			inline int GetTextureIndex(uint triangleIndex)
-			{
-				int index;
-				for (index = 0; triangleIndex < triCountPerTextureIndex[index]; index++);
-				return index;
-			}
 
 			v2f vert (uint triangleIndex : SV_VertexID)
 			{ 
@@ -46,22 +36,22 @@ Shader "Custom/ComputedBaseMaleShader"
 				v2f o;
 
 				o.vertex = UnityObjectToClipPos(vertices[vertexIndex].position);
-				o.normal = vertices[vertexIndex].normal;
+				o.normal = mul(vertices[vertexIndex].normal, unity_WorldToObject);
 
-				o.uv = float3(vertices[vertexIndex].uv, GetTextureIndex(triangleIndex));
+				o.uv = vertices[vertexIndex].uv;
 
 				return o;
 			}
 
 			fixed4 _Color;	
+			float _WrapLight;
 
 			fixed4 frag (v2f i) : SV_Target
 			{
-				float4 normal = float4(i.normal, 0.0);
-				float3 n = normalize(mul(normal, unity_WorldToObject));
+				float3 n = i.normal.xyz;
 				float3 l = normalize(_WorldSpaceLightPos0);
 
-				return saturate(max(0.0, dot(n, l)) * _LightColor0 * _Color);
+				return max(0.0, dot(n, l) * (1 - _WrapLight) + _WrapLight) * _LightColor0 * _Color;
 			}
 			ENDCG
 		}

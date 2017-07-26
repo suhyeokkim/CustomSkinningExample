@@ -71,7 +71,7 @@ public struct DualQuaternion
         other.real = Quaternion.Inverse(dq.real);
         other.dual = new Quaternion(dq.dual.x * (dual - real), dq.dual.y * (dual - real), dq.dual.z * (dual - real), dq.dual.w * (real - dual));
 
-        return other;
+        return other.normalize;
     }
 
     public Matrix4x4 ToMatrix()
@@ -132,7 +132,7 @@ public struct DualQuaternion
         return new DualQuaternion(
             (dq1.real * dq2.real), 
             (dq1.dual * dq2.real).Add(dq1.real * dq2.dual)
-            );
+            ).normalize;
         //*/
     }
 

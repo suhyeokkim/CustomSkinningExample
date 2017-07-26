@@ -1,6 +1,4 @@
 ﻿#ifndef DUALQUATERNION_ARTHIMETIC
-// Upgrade NOTE: excluded shader from OpenGL ES 2.0 because it uses non-square matrices
-#pragma exclude_renderers gles
 #define DUALQUATERNION_ARTHIMETIC
 
 #ifndef QUATERNION_ARITHMETIC
@@ -53,7 +51,7 @@ DQ mulDQ(DQ dq1, DQ dq2)
 {
 	DQ dq;
 
-	dq.real = normalize(mulQxQ(dq1.real, dq2.real));
+	dq.real = mulQxQ(dq1.real, dq2.real);
 	dq.dual = mulQxQ(dq1.dual, dq2.real) + mulQxQ(dq1.real, dq2.dual);
 
 	return dq;
@@ -64,7 +62,7 @@ float3 translateFromDQ(DQ dq)
 	return
 		mulQxQ(
 			dq.dual * 2,
-			normalize(conjugateQuaternion(dq.real))
+			conjugateQuaternion(dq.real)
 		).xyz;
 }
 
@@ -76,6 +74,7 @@ float3 transformPositionByDQ(DQ dq, float3 pos)
 float4x4 DQToMatrix(DQ dq)
 {
 	float4x4 convetedMatrix;
+	float len2 = dot(dq.real, dq.real);
 	float   xx = dq.real.x * dq.real.x, xy = dq.real.x * dq.real.y, xz = dq.real.x * dq.real.z, xw = dq.real.x * dq.real.w,
 		yy = dq.real.y * dq.real.y, yz = dq.real.y * dq.real.z, yw = dq.real.y * dq.real.w,
 		zz = dq.real.z * dq.real.z, zw = dq.real.z * dq.real.w;
@@ -101,6 +100,8 @@ float4x4 DQToMatrix(DQ dq)
 	convetedMatrix[3][0] = 0;
 	convetedMatrix[3][1] = 0;
 	convetedMatrix[3][2] = 0;
+
+	convetedMatrix /= len2;
 
 	convetedMatrix[3][3] = 1.0;
 

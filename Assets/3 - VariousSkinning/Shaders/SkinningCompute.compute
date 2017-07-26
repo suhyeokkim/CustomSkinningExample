@@ -107,7 +107,7 @@ void LinearBlendCompute(uint3 threadID : SV_DispatchThreadID)
         }
         
         meshStream[realVertexID].position = position;
-        meshStream[realVertexID].normal = normal;
+        meshStream[realVertexID].normal = normalize(normal);
         meshStream[realVertexID].uv = meshBuffer[realVertexID].uv;
     }
 }
@@ -135,66 +135,44 @@ void DualQuaternionBlendCompute(uint3 threadID : SV_DispatchThreadID)
     {
         VertexInfo info = meshBuffer[realVertexID];
 
-        DQ	curPoseDQ = multiply(GetCurrentPoseDQ(info.index[0]), info.weight[0]),
-            restPoseDQ = multiply(GetRestPoseDQ(info.index[0]), info.weight[0]),
+        DQ	compareDQ = mulDQ(GetCurrentPoseDQ(info.index[0]), GetRestPoseDQ(info.index[0])),
+			curPoseDQ = multiply(compareDQ, info.weight[0]),
             poseDQBuffer, otherRestPoseDQ;
 
 		if (info.weight[1] > 0)
 		{
-			poseDQBuffer = GetCurrentPoseDQ(info.index[1]);
+			poseDQBuffer = mulDQ(GetCurrentPoseDQ(info.index[1]), GetRestPoseDQ(info.index[1]));
 
-			if (dot(curPoseDQ.real, poseDQBuffer.real) >= 0)
+			if (dot(compareDQ.real, poseDQBuffer.real) >= 0)
 				curPoseDQ = add(curPoseDQ, multiply(poseDQBuffer, info.weight[1]));
 			else
 				curPoseDQ = minus(curPoseDQ, multiply(poseDQBuffer, info.weight[1]));
-
-			poseDQBuffer = GetRestPoseDQ(info.index[1]);
-
-			if (dot(restPoseDQ.real, poseDQBuffer.real) >= 0)
-				restPoseDQ = add(restPoseDQ, multiply(poseDQBuffer, info.weight[1]));
-			else
-				restPoseDQ = minus(restPoseDQ, multiply(poseDQBuffer, info.weight[1]));
-
 		}
 
 		if (info.weight[2] > 0)
 		{
-			poseDQBuffer = GetCurrentPoseDQ(info.index[2]);
+			poseDQBuffer = mulDQ(GetCurrentPoseDQ(info.index[2]), GetRestPoseDQ(info.index[2]));
 
-			if (dot(curPoseDQ.real, poseDQBuffer.real) >= 0)
+			if (dot(compareDQ.real, poseDQBuffer.real) >= 0)
 				curPoseDQ = add(curPoseDQ, multiply(poseDQBuffer, info.weight[2]));
 			else
 				curPoseDQ = minus(curPoseDQ, multiply(poseDQBuffer, info.weight[2]));
-
-			poseDQBuffer = GetRestPoseDQ(info.index[2]);
-
-			if (dot(restPoseDQ.real, poseDQBuffer.real) >= 0)
-				restPoseDQ = add(restPoseDQ, multiply(poseDQBuffer, info.weight[2]));
-			else
-				restPoseDQ = minus(restPoseDQ, multiply(poseDQBuffer, info.weight[2]));
 		}
 
 		if (info.weight[3] > 0)
 		{
-			poseDQBuffer = GetCurrentPoseDQ(info.index[3]);
+			poseDQBuffer = mulDQ(GetCurrentPoseDQ(info.index[3]), GetRestPoseDQ(info.index[3]));
 
-			if (dot(curPoseDQ.real, poseDQBuffer.real) >= 0)
+			if (dot(compareDQ.real, poseDQBuffer.real) >= 0)
 				curPoseDQ = add(curPoseDQ, multiply(poseDQBuffer, info.weight[3]));
 			else
 				curPoseDQ = minus(curPoseDQ, multiply(poseDQBuffer, info.weight[3]));
-
-			poseDQBuffer = GetRestPoseDQ(info.index[3]);
-
-			if (dot(restPoseDQ.real, poseDQBuffer.real) >= 0)
-				restPoseDQ = add(restPoseDQ, multiply(poseDQBuffer, info.weight[3]));
-			else
-				restPoseDQ = minus(restPoseDQ, multiply(poseDQBuffer, info.weight[3]));
 		}
 		 
-        DQ transform = mulDQ(normalizeDQ(curPoseDQ), normalizeDQ(restPoseDQ));
+        DQ dqTransfrom = normalizeDQ(curPoseDQ);
 
-        meshStream[realVertexID].position = float4(transformPositionByDQ(transform, meshBuffer[realVertexID].position.xyz), 0);
-        meshStream[realVertexID].normal = float4(transformPositionByDQ(transform, meshBuffer[realVertexID].normal.xyz), 0);
+        meshStream[realVertexID].position = float4(transformPositionByDQ(dqTransfrom, meshBuffer[realVertexID].position.xyz), 1);
+        meshStream[realVertexID].normal = float4(normalize(transformPositionByQ(dqTransfrom.real, meshBuffer[realVertexID].normal.xyz)), 0);
         meshStream[realVertexID].uv = meshBuffer[realVertexID].uv;
     }
 }
@@ -230,8 +208,8 @@ void OptimizedCenterOfRotationCompute(uint3 threadID : SV_DispatchThreadID)
 				float4(centerOfRotation, 1)
 			) * info.weight[0];
 		float4 
-			restPoseRotation = GetRestPoseRotation(info.index[0]) * info.weight[0], 
-			currentPoseRotation = GetCurrentPoseRotation(info.index[0]) * info.weight[0];
+			compareRotation = mulQxQ(GetCurrentPoseRotation(info.index[0]), GetRestPoseRotation(info.index[0])),
+			currentPoseRotation = compareRotation * info.weight[0];
 		float4 rotationBuffer;
 
 		if (info.weight[1] > 0)
@@ -242,19 +220,12 @@ void OptimizedCenterOfRotationCompute(uint3 threadID : SV_DispatchThreadID)
 				float4(centerOfRotation, 1)
 			) * info.weight[1];
 
-			rotationBuffer = GetRestPoseRotation(info.index[1]) * info.weight[1];
+			rotationBuffer = mulQxQ(GetCurrentPoseRotation(info.index[1]), GetRestPoseRotation(info.index[1]));
 
-			if (dot(restPoseRotation, rotationBuffer) >= 0)
-				restPoseRotation += rotationBuffer;
+			if (dot(compareRotation, rotationBuffer) >= 0)
+				currentPoseRotation += rotationBuffer * info.weight[1];
 			else
-				restPoseRotation -= rotationBuffer;
-
-			rotationBuffer = GetCurrentPoseRotation(info.index[1]) * info.weight[1];
-
-			if (dot(currentPoseRotation, rotationBuffer) >= 0)
-				currentPoseRotation += rotationBuffer;
-			else
-				currentPoseRotation -= rotationBuffer;
+				currentPoseRotation -= rotationBuffer * info.weight[1];
 		}
 
 		if (info.weight[2] > 0)
@@ -265,19 +236,12 @@ void OptimizedCenterOfRotationCompute(uint3 threadID : SV_DispatchThreadID)
 				float4(centerOfRotation, 1)
 			) * info.weight[2];
 
-			rotationBuffer = GetRestPoseRotation(info.index[2]) * info.weight[2];
+			rotationBuffer = mulQxQ(GetCurrentPoseRotation(info.index[2]), GetRestPoseRotation(info.index[2]));
 
-			if (dot(restPoseRotation, rotationBuffer) >= 0)
-				restPoseRotation += rotationBuffer;
+			if (dot(compareRotation, rotationBuffer) >= 0)
+				currentPoseRotation += rotationBuffer * info.weight[2];
 			else
-				restPoseRotation -= rotationBuffer;
-
-			rotationBuffer = GetCurrentPoseRotation(info.index[2]) * info.weight[2];
-
-			if (dot(currentPoseRotation, rotationBuffer) >= 0)
-				currentPoseRotation += rotationBuffer;
-			else
-				currentPoseRotation -= rotationBuffer;
+				currentPoseRotation -= rotationBuffer * info.weight[2];
 		}
 
 		if (info.weight[3] > 0)
@@ -288,22 +252,15 @@ void OptimizedCenterOfRotationCompute(uint3 threadID : SV_DispatchThreadID)
 				float4(centerOfRotation, 1)
 			) * info.weight[3];
 
-			rotationBuffer = GetRestPoseRotation(info.index[3]) * info.weight[3];
+			rotationBuffer = mulQxQ(GetCurrentPoseRotation(info.index[3]), GetRestPoseRotation(info.index[3]));
 
-			if (dot(restPoseRotation, rotationBuffer) >= 0)
-				restPoseRotation += rotationBuffer;
+			if (dot(compareRotation, rotationBuffer) >= 0)
+				currentPoseRotation += rotationBuffer * info.weight[3];
 			else
-				restPoseRotation -= rotationBuffer;
-
-			rotationBuffer = GetCurrentPoseRotation(info.index[3]) * info.weight[3];
-
-			if (dot(currentPoseRotation, rotationBuffer) >= 0)
-				currentPoseRotation += rotationBuffer;
-			else
-				currentPoseRotation -= rotationBuffer;
+				currentPoseRotation -= rotationBuffer * info.weight[3];
 		}
 
-		float4 rotation = mulQxQ(normalize(currentPoseRotation), normalize(restPoseRotation));
+		float4 rotation = normalize(currentPoseRotation);
 
 		meshStream[realVertexID].position = 
 			float4(

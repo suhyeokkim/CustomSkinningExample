@@ -56,25 +56,10 @@
             dispatchcer = ComputeShaderSkinningDispatcherFactory.CreateComputeBy(method, computeShader, chunk, bones, () => { return meshDataBuffer; }, () => { return meshDataStream; });
 
             renderer = new ComputeShaderRenderer(chunk, material, () => { return meshDataStream; });
-
-            dataInfo = new MeshDataInfo[chunk.meshData.Length];
         }
-
-        MeshDataInfo[] dataInfo = null;
-
+        
         public void Update()
         {
-            if (Input.GetKeyUp(KeyCode.A))
-            {
-                meshDataStream.GetData(dataInfo);
-
-                StringBuilder builder = new StringBuilder();
-
-                Array.ForEach(dataInfo, (data) => { builder.Append(data.position).Append("\n"); });
-
-                Debug.Log(builder.ToString());
-            }
-
             if (Input.GetKey(KeyCode.Space))
             {
                 sourceDispatcher.Dispatch();
@@ -197,7 +182,7 @@
 
             boneCurrentPoseMatrixBuffer.SetData(currentPoseMatrixArray);
 
-            computeShader.Dispatch(kernelIndex, (int)(vertexCount / (long)maxThreadSizeX + 1), 1, 1);
+            computeShader.Dispatch(kernelIndex, (int)(vertexCount / maxThreadSizeX) + 1, 1, 1);
         }
 
         public void Dispose()
@@ -272,7 +257,7 @@
 
             boneCurrentPoseDQBuffer.SetData(currentPoseDQArray);
 
-            computeShader.Dispatch(kernelIndex, (int)(vertexCount / (long)maxThreadSizeX + 1), 1, 1);
+            computeShader.Dispatch(kernelIndex, (int)(vertexCount / maxThreadSizeX) + 1, 1, 1);
         }
 
         public void Dispose()
@@ -375,7 +360,7 @@
             boneCurrentPoseMatrixBuffer.SetData(currentPoseMatrixArray);
             boneCurrentPoseRotationQuatBuffer.SetData(currentPoseRotationQuatArray);
 
-            computeShader.Dispatch(kernelIndex, (int)(vertexCount / (long)maxThreadSizeX + 1), 1, 1);
+            computeShader.Dispatch(kernelIndex, (int)(vertexCount / maxThreadSizeX) + 1, 1, 1);
         }
 
         public void Dispose()

@@ -9,7 +9,7 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d873811ec0446a04c866764c0de0e9fc, type: 3}
-  m_Name: LFS_Jako
+  m_Name: JakoData
   m_EditorClassIdentifier: 
   builtInRenderer: {fileID: 13700000, guid: 1e369b790ed75bf4f972def98e7b689d, type: 3}
   rootBoneName: Reference

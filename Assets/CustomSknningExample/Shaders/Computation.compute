@@ -1,0 +1,349 @@
+﻿CGPROGRAM
+
+#include <DataDefination.cginc>
+
+#pragma kernel LinearBlendCompute
+#pragma kernel DualQuaternionBlendCompute
+#pragma kernel OptimizedCenterOfRotationCompute
+
+#pragma kernel DataToDataCompute
+
+#pragma kernel TensionCompute
+
+StructuredBuffer<DataPerVertex>				vertices;
+StructuredBuffer<SkinPerVertex>				skin;
+RWStructuredBuffer<DataPerVertex>			output;
+
+// Start of Linear Blend Skinning
+
+StructuredBuffer<float4x4>					currPoseMtrx;
+StructuredBuffer<float4x4>					restPoseMtrx;
+
+cbuffer Config
+{
+    uint vertexCount;
+}
+
+#define MAX_THREAD_ID 1024	
+
+[numthreads(MAX_THREAD_ID, 1, 1)]
+void LinearBlendCompute(uint3 threadID : SV_DispatchThreadID)
+{
+    for (uint vrtID = threadID[0]; vrtID < vertexCount; vrtID += MAX_THREAD_ID)
+    {
+        float4x4 
+            transformMatrix = 
+						mul(
+							currPoseMtrx[skin[vrtID].index[0]], 
+							restPoseMtrx[skin[vrtID].index[0]]
+						);
+
+        float3
+            position =  (
+						mul(
+                            transformMatrix, 
+                            float4(vertices[vrtID].position.xyz, 1)
+                        ) * skin[vrtID].weight[0]
+						).xyz;
+        float3
+            normal =    (
+						mul(
+                            transformMatrix, 
+                            float4(vertices[vrtID].normal.xyz, 0)
+                        ) * skin[vrtID].weight[0]
+						).xyz;
+        float3
+            tangent =   (
+						mul(
+                            transformMatrix, 
+                            float4(vertices[vrtID].tangent.xyz, 0)
+                        ) * skin[vrtID].weight[0]
+						).xyz;
+
+            transformMatrix = 
+						mul(
+							currPoseMtrx[skin[vrtID].index[1]], 
+							restPoseMtrx[skin[vrtID].index[1]]
+						);
+
+            position += (
+                        mul(
+                            transformMatrix, 
+                            float4(vertices[vrtID].position.xyz, 1)
+						) * skin[vrtID].weight[1]
+						).xyz;
+            
+            normal +=   (
+                        mul(
+                            transformMatrix, 
+                            float4(vertices[vrtID].normal.xyz, 0)
+						) * skin[vrtID].weight[1]
+						).xyz;
+
+			tangent +=  (
+                        mul(
+                            transformMatrix, 
+                            float4(vertices[vrtID].tangent.xyz, 0)
+						) * skin[vrtID].weight[1]
+						).xyz;
+            
+            transformMatrix = 
+						mul(
+							currPoseMtrx[skin[vrtID].index[2]], 
+							restPoseMtrx[skin[vrtID].index[2]]
+						);
+
+            position += (
+                        mul(
+                            transformMatrix, 
+                            float4(vertices[vrtID].position.xyz, 1)
+            			) * skin[vrtID].weight[2]
+						).xyz;
+
+            normal +=	(
+						mul(
+						    transformMatrix, 
+						    float4(vertices[vrtID].normal.xyz, 0)
+						) * skin[vrtID].weight[2]
+						).xyz;
+
+			tangent +=  (
+                        mul(
+                            transformMatrix, 
+                            float4(vertices[vrtID].tangent.xyz, 0)
+						) * skin[vrtID].weight[2]
+						).xyz;
+        
+            transformMatrix = 
+						mul(
+							currPoseMtrx[skin[vrtID].index[3]], 
+							restPoseMtrx[skin[vrtID].index[3]]
+						);
+
+            position += (
+                        mul(
+                            transformMatrix, 
+                            float4(vertices[vrtID].position.xyz, 1)
+            			) * skin[vrtID].weight[3]
+						).xyz;
+
+            normal +=	(
+						mul(
+						    transformMatrix, 
+						    float4(vertices[vrtID].normal.xyz, 0)
+						) * skin[vrtID].weight[3]
+						).xyz;
+
+			tangent +=  (
+                        mul(
+                            transformMatrix, 
+                            float4(vertices[vrtID].tangent.xyz, 0)
+						) * skin[vrtID].weight[3]
+						).xyz;
+        
+        output[vrtID].position = float4(position.xyz, 1);
+		output[vrtID].normal = float4(normal.xyz, 0);
+		output[vrtID].tangent = float4(tangent.xyz, 0);
+        output[vrtID].uv = vertices[vrtID].uv;
+    }
+}
+
+// Start of Dual Quaternion Blend Skinning
+#include <DualQuaternion.cginc>
+
+StructuredBuffer<DQ> currPoseDQ;
+StructuredBuffer<DQ> restPoseDQ;
+
+[numthreads(MAX_THREAD_ID, 1, 1)]
+void DualQuaternionBlendCompute(uint3 threadID : SV_DispatchThreadID)
+{
+    for (uint vrtID = threadID[0]; vrtID < vertexCount; vrtID += MAX_THREAD_ID)
+    {
+        DQ	compareDQ = mulDQ(currPoseDQ[skin[vrtID].index[0]], restPoseDQ[skin[vrtID].index[0]]),
+			curPoseDQ = multiply(compareDQ, skin[vrtID].weight[0]),
+            poseDQBuffer, otherRestPoseDQ;
+
+		poseDQBuffer =
+			mulDQ(
+				currPoseDQ[skin[vrtID].index[0]],
+				restPoseDQ[skin[vrtID].index[0]]
+			);
+
+		if (dot(compareDQ.real, poseDQBuffer.real) >= 0)
+			curPoseDQ = add(curPoseDQ, multiply(poseDQBuffer, skin[vrtID].weight[0]));
+		else
+			curPoseDQ = minus(curPoseDQ, multiply(poseDQBuffer, skin[vrtID].weight[0]));
+
+		[loop]
+		for (int weightIndex = 1; weightIndex < 4; weightIndex++)
+		{
+			poseDQBuffer = 
+				mulDQ(
+					currPoseDQ[skin[vrtID].index[weightIndex]],
+					restPoseDQ[skin[vrtID].index[weightIndex]]
+				);
+
+			if (dot(compareDQ.real, poseDQBuffer.real) >= 0)
+				curPoseDQ = add(curPoseDQ, multiply(poseDQBuffer, skin[vrtID].weight[weightIndex]));
+			else
+				curPoseDQ = minus(curPoseDQ, multiply(poseDQBuffer, skin[vrtID].weight[weightIndex]));
+		}
+
+		DataPerVertex info = vertices[vrtID];
+        DQ dqTransfrom = normalizeDQ(curPoseDQ);
+
+        output[vrtID].position = 
+			float4(
+				transformPositionByDQ(
+					dqTransfrom, 
+					info.position.xyz
+				), 
+				1
+			);
+		output[vrtID].normal = 
+			float4(
+				normalize(
+					transformPositionByQ(
+						dqTransfrom.real,
+						info.normal.xyz
+					)
+				),
+				0
+			);
+		output[vrtID].tangent = 
+			float4(
+				normalize(
+					transformPositionByQ(
+						dqTransfrom.real,
+						info.tangent.xyz
+					)
+				),
+				0
+			);
+        output[vrtID].uv = vertices[vrtID].uv;
+    }
+}
+
+Buffer<float4> currPoseRot;
+Buffer<float4> restPoseRot;
+
+Buffer<float3> CORBuffer;
+
+[numthreads(MAX_THREAD_ID, 1, 1)]
+void OptimizedCenterOfRotationCompute(uint3 threadID : SV_DispatchThreadID)
+{
+    for (uint vrtID = threadID[0]; vrtID < vertexCount; vrtID += MAX_THREAD_ID)
+    {
+		float4x4
+			transMtrx = 
+			mul(
+				currPoseMtrx[skin[vrtID].index[0]],
+				restPoseMtrx[skin[vrtID].index[0]]
+			);
+		float4
+			LBSCenterOfRotation = 
+			mul(
+				transMtrx,
+				float4(CORBuffer[vrtID], 1)
+			) * skin[vrtID].weight[0];
+		float4 
+			compareRotation = 
+			mulQxQ(
+				currPoseRot[skin[vrtID].index[0]],
+				restPoseRot[skin[vrtID].index[0]]
+			),
+			currentPoseRotation = compareRotation * skin[vrtID].weight[0];
+		float4 rotationBuffer;
+
+		[loop]
+		for (int weightIndex = 1; weightIndex < 4; weightIndex++)
+		{
+			transMtrx = 
+				mul(
+					currPoseMtrx[skin[vrtID].index[weightIndex]],
+					restPoseMtrx[skin[vrtID].index[weightIndex]]
+				);
+			LBSCenterOfRotation += mul(
+				transMtrx,
+				float4(CORBuffer[vrtID], 1)
+			) * skin[vrtID].weight[weightIndex];
+
+			rotationBuffer = 
+				mulQxQ(
+					currPoseRot[skin[vrtID].index[weightIndex]],
+					restPoseRot[skin[vrtID].index[weightIndex]]
+				);
+
+			if (dot(compareRotation, rotationBuffer) >= 0)
+				currentPoseRotation += rotationBuffer * skin[vrtID].weight[weightIndex];
+			else
+				currentPoseRotation -= rotationBuffer * skin[vrtID].weight[weightIndex];
+		}
+
+		float4 rotation = normalize(currentPoseRotation);
+		DataPerVertex info = vertices[vrtID];
+
+		output[vrtID].position = 
+			float4(
+				LBSCenterOfRotation.xyz 
+				- transformPositionByQ(rotation, CORBuffer[vrtID])
+				+ transformPositionByQ(rotation, info.position.xyz), 
+				1);
+		output[vrtID].normal = float4(transformPositionByQ(rotation, info.normal.xyz), 0);
+		output[vrtID].tangent = float4(transformPositionByQ(rotation, info.tangent.xyz), 0);
+		output[vrtID].uv = vertices[vrtID].uv;
+	}
+}
+
+// This computation kernel just copy source data
+[numthreads(MAX_THREAD_ID, 1, 1)]
+void DataToDataCompute(uint3 threadID : SV_DispatchThreadID)
+{
+    for (uint vrtID = threadID[0]; vrtID < vertexCount; vrtID += MAX_THREAD_ID)
+    {
+        output[vrtID].position = vertices[vrtID].position;
+		output[vrtID].normal = vertices[vrtID].normal;
+		output[vrtID].tangent = vertices[vrtID].tangent;
+        output[vrtID].uv = vertices[vrtID].uv;
+    }
+}
+
+cbuffer Tension
+{
+	uint patchCount;
+	//uint topologyCount = 3;
+}
+
+StructuredBuffer<DataPerVertex>		deformVertices;
+Buffer<int>							indexBuffer;
+Buffer<float>						edgeLengthBuffer;
+RWBuffer<float>						tensionPerVertex;
+
+#define TOPOL_MAX 3
+
+[numthreads(MAX_THREAD_ID, 1, 1)]
+void TensionCompute(uint3 threadID : SV_DispatchThreadID)
+{
+	for (uint patchID = threadID[0]; patchID < patchCount; patchID += MAX_THREAD_ID)
+	{
+		[loop]
+		for (int indexOffset = 0; indexOffset < TOPOL_MAX; indexOffset++)
+		{
+			int patchIndexID = patchID * TOPOL_MAX;
+			float4 delta1 = 
+				deformVertices[indexBuffer[patchIndexID + indexOffset]].position -
+				deformVertices[indexBuffer[patchIndexID + ((uint)indexOffset + 1) % TOPOL_MAX]].position,
+				delta2 = 
+				deformVertices[indexBuffer[patchIndexID + ((uint)indexOffset - 1 + TOPOL_MAX) % TOPOL_MAX]].position -
+				deformVertices[indexBuffer[patchIndexID + indexOffset]].position;
+
+			float tension = 
+				dot(delta1.xyz, delta1.xyz) / edgeLengthBuffer[patchIndexID + indexOffset] +
+				dot(delta2.xyz, delta2.xyz) / edgeLengthBuffer[patchIndexID + ((uint)indexOffset - 1 + TOPOL_MAX) % TOPOL_MAX];
+
+			tensionPerVertex[indexBuffer[patchIndexID + indexOffset]] = tension / 2;
+		}
+	}
+}
+
+ENDCG

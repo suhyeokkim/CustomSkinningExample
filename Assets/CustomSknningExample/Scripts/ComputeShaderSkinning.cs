@@ -471,7 +471,7 @@
         {
             material.SetPass(0);
 
-            Graphics.DrawProcedural(MeshTopology.Triangles, getIndexBuffer().count);
+            Graphics.DrawProceduralNow(MeshTopology.Triangles, getIndexBuffer().count);
         }
     }
 
@@ -509,7 +509,7 @@
         {
             material.SetPass(0);
 
-            Graphics.DrawProcedural(MeshTopology.Triangles, getIndexBuffer().count);
+            Graphics.DrawProceduralNow(MeshTopology.Triangles, getIndexBuffer().count);
         }
     }
 }

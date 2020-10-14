@@ -5,6 +5,7 @@ EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
   m_Scenes:
-  - enabled: 1
-    path: Assets/2 - InstancedSkinning/ManyMeshTest2Scene.unity
-    guid: 5e1c6f8c532468e4493014ffc9cbd7f7
+  - enabled: 0
+    path: 
+    guid: 00000000000000000000000000000000
+  m_configObjects: {}

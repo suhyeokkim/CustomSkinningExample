@@ -6,6 +6,7 @@
     using System.Runtime.InteropServices;
     using System.Text;
     using UnityEngine;
+    using UnityEngine.Rendering;
 
     public interface IDispatch { void Dispatch(); }
     public interface IDisposableDispatch : IDispatch, IDisposable { }
@@ -40,7 +41,7 @@
         public ComputeBuffer perVertexSkinBuffer;
         public ComputeBuffer perVertexStream;
 
-        public ComputeBuffer indexBuffer;
+        public GraphicsBuffer indexBuffer;
         public ComputeBuffer indexCountBuffer;
 
         public IDispatch tensionDispatcher;
@@ -61,7 +62,7 @@
             perVertexStream = new ComputeBuffer(chunk.vertexCount, Marshal.SizeOf(typeof(DataPerVertex)));
             perVertexStream.SetData(chunk.dataPerVertex);
 
-            indexBuffer = new ComputeBuffer(chunk.indices.Length, sizeof(int));
+            indexBuffer = new GraphicsBuffer(GraphicsBuffer.Target.Index, chunk.indices.Length, sizeof(int));
             indexBuffer.SetData(chunk.indices);
 
             indexCountBuffer = new ComputeBuffer(chunk.indexCounts.Length, sizeof(int));
@@ -88,8 +89,7 @@
                                                         chunk, 
                                                         material, 
                                                         () => perVertexStream, 
-                                                        () => indexBuffer,
-                                                        () => indexCountBuffer
+                                                        () => indexBuffer
                                                     );
             }
             else
@@ -108,7 +108,7 @@
                                                             () => edgeLengthBuffer, 
                                                             () => tensionBuffer
                                                             );
-                renderer = new TensionRenderer(chunk, material, () => tensionBuffer, () => perVertexStream, () => indexBuffer, () => indexCountBuffer);
+                renderer = new TensionRenderer(chunk, material, () => tensionBuffer, () => perVertexStream, () => indexBuffer);
             }
         }
         
@@ -408,11 +408,11 @@
         public ComputeShader computeShader;
 
         public Func<ComputeBuffer> getPerVertexStream;
-        public Func<ComputeBuffer> getIndexBuffer;
+        public Func<GraphicsBuffer> getIndexBuffer;
         public Func<ComputeBuffer> getEdgeLengthBuffer;
         public Func<ComputeBuffer> getTensionPerVertex;
 
-        public TensionDispatcher(ComputeShader computeShader, RenderChunk chunk, Func<ComputeBuffer> getPerVertexStream, Func<ComputeBuffer> getIndexBuffer,  Func<ComputeBuffer> getEdgeLengthBuffer, Func<ComputeBuffer> getTensionPerVertex)
+        public TensionDispatcher(ComputeShader computeShader, RenderChunk chunk, Func<ComputeBuffer> getPerVertexStream, Func<GraphicsBuffer> getIndexBuffer,  Func<ComputeBuffer> getEdgeLengthBuffer, Func<ComputeBuffer> getTensionPerVertex)
         {
             this.computeShader = computeShader;
 
@@ -446,20 +446,16 @@
     {
         public Material material;
 
-        public Func<ComputeBuffer> getIndexBuffer;
-        public Func<ComputeBuffer> getIndexCountBuffer;
+        public Func<GraphicsBuffer> getIndexBuffer;
         public Func<ComputeBuffer> getPerVertexStream;
 
-        public ComputeShaderRenderer(RenderChunk chunk, Material material, Func<ComputeBuffer> getPerVertexStream, Func<ComputeBuffer> getIndexBuffer, Func<ComputeBuffer> getIndexCountBuffer)
+        public ComputeShaderRenderer(RenderChunk chunk, Material material, Func<ComputeBuffer> getPerVertexStream, Func<GraphicsBuffer> getIndexBuffer)
         {
             this.material = material;
 
             this.getIndexBuffer = getIndexBuffer;
-            this.getIndexCountBuffer = getIndexCountBuffer;
             this.getPerVertexStream = getPerVertexStream;
 
-            material.SetBuffer("triangles", getIndexBuffer());
-            material.SetBuffer("triCountPerTextureIndex", getIndexCountBuffer());
             material.SetBuffer("dataPerVertex", getPerVertexStream());
         }
 
@@ -470,8 +466,7 @@
         public void OnRenderObject()
         {
             material.SetPass(0);
-
-            Graphics.DrawProceduralNow(MeshTopology.Triangles, getIndexBuffer().count);
+            Graphics.DrawProceduralNow(MeshTopology.Triangles, getIndexBuffer(), getIndexBuffer().count);
         }
     }
 
@@ -479,13 +474,11 @@
     {
         public Material material;
 
-        public Func<ComputeBuffer> getIndexBuffer;
-        public Func<ComputeBuffer> getIndexCountBuffer;
-
+        public Func<GraphicsBuffer> getIndexBuffer;
         public Func<ComputeBuffer> getPerVertexStream;
         public Func<ComputeBuffer> getTensionBuffer;
 
-        public TensionRenderer(RenderChunk chunk, Material material, Func<ComputeBuffer> getTensionBuffer, Func<ComputeBuffer> getPerVertexStream, Func<ComputeBuffer> getIndexBuffer, Func<ComputeBuffer> getIndexCountBuffer)
+        public TensionRenderer(RenderChunk chunk, Material material, Func<ComputeBuffer> getTensionBuffer, Func<ComputeBuffer> getPerVertexStream, Func<GraphicsBuffer> getIndexBuffer)
         {
             this.material = material;
 
@@ -493,10 +486,7 @@
             this.getTensionBuffer = getTensionBuffer;
 
             this.getIndexBuffer = getIndexBuffer;
-            this.getIndexCountBuffer = getIndexCountBuffer;
 
-            material.SetBuffer("triangles", getIndexBuffer());
-            material.SetBuffer("triCountPerTextureIndex", getIndexCountBuffer());
             material.SetBuffer("dataPerVertex", getPerVertexStream());
             material.SetBuffer("tension", getTensionBuffer());
         }
@@ -508,8 +498,7 @@
         public void OnRenderObject()
         {
             material.SetPass(0);
-
-            Graphics.DrawProceduralNow(MeshTopology.Triangles, getIndexBuffer().count);
+            Graphics.DrawProceduralNow(MeshTopology.Triangles, getIndexBuffer(), getIndexBuffer().count);
         }
     }
 }

@@ -36,14 +36,11 @@
     public struct DataPerVertex
     {
         public Vector4 position;
-        public Vector4 normal;
-        public Vector4 tangent;
-
         public Vector2 uv;
 
         public override string ToString()
         {
-            return String.Format("Position : {0}, Normal : {1}, Tangent : {2}, UV : {3}", position, normal, tangent, uv);
+            return String.Format("Position : {0}, UV : {1}", position, uv);
         }
     };
 

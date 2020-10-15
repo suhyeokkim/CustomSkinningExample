@@ -4,9 +4,6 @@
 struct DataPerVertex
 {
 	float4 position;
-	float4 normal;
-	float4 tangent;
-
 	float2 uv;
 };
 

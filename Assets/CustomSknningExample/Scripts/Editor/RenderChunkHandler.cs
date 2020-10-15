@@ -50,8 +50,6 @@
                 SkinPerVertex[] skinPerVertex = new SkinPerVertex[mesh.vertexCount];
 
                 Vector3[] vertices = mesh.vertices;
-                Vector3[] normals = mesh.normals;
-                Vector4[] tangents = mesh.tangents;
                 Vector2[] uv = mesh.uv;
 
                 BoneWeight[] sourceBoneWeights = mesh.boneWeights;
@@ -63,8 +61,6 @@
                         new DataPerVertex()
                         {
                             position = vertices[i],
-                            normal = normals[i],
-                            tangent = tangents[i],
                             uv = uv[i],
                         };
                     skinPerVertex[i] =

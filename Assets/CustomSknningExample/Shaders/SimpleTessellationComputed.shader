@@ -21,11 +21,10 @@
 			#include "Lighting.cginc"
 			#include "DataDefination.cginc"
 
-			struct VS_OUTPUT
+			struct v2f
 			{
-				float4 vertex		: SV_POSITION;
-				float3 normal		: NORMAL;
-				float3 tangent		: TANGENT;
+				float4 positionCS	: SV_POSITION;
+				float3 positionWS	: TEXCOORD1;
 				float2 uv			: TEXCOORD0;
 #if TENSION_DEBUG
 				float3 color		: COLOR;
@@ -38,14 +37,13 @@
 			uniform Buffer<float> tension;
 #endif
 
-			VS_OUTPUT vert(uint triangleIndex : SV_VertexID)
+			v2f vert(uint triangleIndex : SV_VertexID)
 			{
 				uint vertexIndex = triangles[triangleIndex];
-				VS_OUTPUT o;
+				v2f o;
 
-				o.vertex = UnityObjectToClipPos(dataPerVertex[vertexIndex].position);
-				o.normal = mul(unity_WorldToObject, dataPerVertex[vertexIndex].normal);
-				o.tangent = mul(unity_WorldToObject, dataPerVertex[vertexIndex].tangent);
+				o.positionCS = UnityObjectToClipPos(dataPerVertex[vertexIndex].position);
+				o.positionWS = dataPerVertex[vertexIndex].position;
 				o.uv = dataPerVertex[vertexIndex].uv;
 
 #if TENSION_DEBUG
@@ -60,12 +58,12 @@
 
 			fixed4 _Color;
 
-			fixed4 frag(VS_OUTPUT i) : SV_Target
+			fixed4 frag(v2f i) : SV_Target
 			{
 #if TENSION_DEBUG
 				return fixed4(i.color, 0);
 #else 
-				float3 n = i.normal.xyz;
+				float3 n = cross(normalize(ddx(i.positionWS)), normalize(ddy(i.positionWS)));
 				float3 l = normalize(_WorldSpaceLightPos0);
 
 				return max(dot(n, l), 0) * _LightColor0 * _Color;

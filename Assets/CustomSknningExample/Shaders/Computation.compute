@@ -31,119 +31,35 @@ void LinearBlendCompute(uint3 threadID : SV_DispatchThreadID)
 {
     for (uint vrtID = threadID[0]; vrtID < vertexCount; vrtID += MAX_THREAD_ID)
     {
-        float4x4 
-            transformMatrix = 
-						mul(
-							currPoseMtrx[skin[vrtID].index[0]], 
-							restPoseMtrx[skin[vrtID].index[0]]
-						);
+        float4x4 transformMatrix = mul(currPoseMtrx[skin[vrtID].index[0]], restPoseMtrx[skin[vrtID].index[0]]);
+        float3 position = (mul(transformMatrix, float4(vertices[vrtID].position.xyz, 1)) * skin[vrtID].weight[0]).xyz;
 
-        float3
-            position =  (
-						mul(
-                            transformMatrix, 
-                            float4(vertices[vrtID].position.xyz, 1)
-                        ) * skin[vrtID].weight[0]
-						).xyz;
-        float3
-            normal =    (
-						mul(
-                            transformMatrix, 
-                            float4(vertices[vrtID].normal.xyz, 0)
-                        ) * skin[vrtID].weight[0]
-						).xyz;
-        float3
-            tangent =   (
-						mul(
-                            transformMatrix, 
-                            float4(vertices[vrtID].tangent.xyz, 0)
-                        ) * skin[vrtID].weight[0]
-						).xyz;
-
-            transformMatrix = 
-						mul(
-							currPoseMtrx[skin[vrtID].index[1]], 
-							restPoseMtrx[skin[vrtID].index[1]]
-						);
-
-            position += (
-                        mul(
-                            transformMatrix, 
-                            float4(vertices[vrtID].position.xyz, 1)
-						) * skin[vrtID].weight[1]
-						).xyz;
+        transformMatrix = mul(currPoseMtrx[skin[vrtID].index[1]], restPoseMtrx[skin[vrtID].index[1]]);
+        position += (mul(transformMatrix, float4(vertices[vrtID].position.xyz, 1)) * skin[vrtID].weight[1]).xyz;
             
-            normal +=   (
-                        mul(
-                            transformMatrix, 
-                            float4(vertices[vrtID].normal.xyz, 0)
-						) * skin[vrtID].weight[1]
-						).xyz;
+        transformMatrix = mul(currPoseMtrx[skin[vrtID].index[2]], restPoseMtrx[skin[vrtID].index[2]]);
+        position += (
+                    mul(
+                        transformMatrix, 
+                        float4(vertices[vrtID].position.xyz, 1)
+            		) * skin[vrtID].weight[2]
+					).xyz;
 
-			tangent +=  (
-                        mul(
-                            transformMatrix, 
-                            float4(vertices[vrtID].tangent.xyz, 0)
-						) * skin[vrtID].weight[1]
-						).xyz;
-            
-            transformMatrix = 
-						mul(
-							currPoseMtrx[skin[vrtID].index[2]], 
-							restPoseMtrx[skin[vrtID].index[2]]
-						);
-
-            position += (
-                        mul(
-                            transformMatrix, 
-                            float4(vertices[vrtID].position.xyz, 1)
-            			) * skin[vrtID].weight[2]
-						).xyz;
-
-            normal +=	(
-						mul(
-						    transformMatrix, 
-						    float4(vertices[vrtID].normal.xyz, 0)
-						) * skin[vrtID].weight[2]
-						).xyz;
-
-			tangent +=  (
-                        mul(
-                            transformMatrix, 
-                            float4(vertices[vrtID].tangent.xyz, 0)
-						) * skin[vrtID].weight[2]
-						).xyz;
         
-            transformMatrix = 
-						mul(
-							currPoseMtrx[skin[vrtID].index[3]], 
-							restPoseMtrx[skin[vrtID].index[3]]
-						);
+        transformMatrix = 
+					mul(
+						currPoseMtrx[skin[vrtID].index[3]], 
+						restPoseMtrx[skin[vrtID].index[3]]
+					);
 
-            position += (
-                        mul(
-                            transformMatrix, 
-                            float4(vertices[vrtID].position.xyz, 1)
-            			) * skin[vrtID].weight[3]
-						).xyz;
+        position += (
+                    mul(
+                        transformMatrix, 
+                        float4(vertices[vrtID].position.xyz, 1)
+            		) * skin[vrtID].weight[3]
+					).xyz;
 
-            normal +=	(
-						mul(
-						    transformMatrix, 
-						    float4(vertices[vrtID].normal.xyz, 0)
-						) * skin[vrtID].weight[3]
-						).xyz;
-
-			tangent +=  (
-                        mul(
-                            transformMatrix, 
-                            float4(vertices[vrtID].tangent.xyz, 0)
-						) * skin[vrtID].weight[3]
-						).xyz;
-        
         output[vrtID].position = float4(position.xyz, 1);
-		output[vrtID].normal = float4(normal.xyz, 0);
-		output[vrtID].tangent = float4(tangent.xyz, 0);
         output[vrtID].uv = vertices[vrtID].uv;
     }
 }
@@ -199,26 +115,6 @@ void DualQuaternionBlendCompute(uint3 threadID : SV_DispatchThreadID)
 					info.position.xyz
 				), 
 				1
-			);
-		output[vrtID].normal = 
-			float4(
-				normalize(
-					transformPositionByQ(
-						dqTransfrom.real,
-						info.normal.xyz
-					)
-				),
-				0
-			);
-		output[vrtID].tangent = 
-			float4(
-				normalize(
-					transformPositionByQ(
-						dqTransfrom.real,
-						info.tangent.xyz
-					)
-				),
-				0
 			);
         output[vrtID].uv = vertices[vrtID].uv;
     }
@@ -289,8 +185,6 @@ void OptimizedCenterOfRotationCompute(uint3 threadID : SV_DispatchThreadID)
 				- transformPositionByQ(rotation, CORBuffer[vrtID])
 				+ transformPositionByQ(rotation, info.position.xyz), 
 				1);
-		output[vrtID].normal = float4(transformPositionByQ(rotation, info.normal.xyz), 0);
-		output[vrtID].tangent = float4(transformPositionByQ(rotation, info.tangent.xyz), 0);
 		output[vrtID].uv = vertices[vrtID].uv;
 	}
 }
@@ -302,8 +196,6 @@ void DataToDataCompute(uint3 threadID : SV_DispatchThreadID)
     for (uint vrtID = threadID[0]; vrtID < vertexCount; vrtID += MAX_THREAD_ID)
     {
         output[vrtID].position = vertices[vrtID].position;
-		output[vrtID].normal = vertices[vrtID].normal;
-		output[vrtID].tangent = vertices[vrtID].tangent;
         output[vrtID].uv = vertices[vrtID].uv;
     }
 }

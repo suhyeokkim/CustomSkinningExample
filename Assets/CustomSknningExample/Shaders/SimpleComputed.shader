@@ -9,7 +9,7 @@
 	{
 		Pass
 		{
-			Name "ColorDraw"
+			Name "Forward"
 
 			CGPROGRAM
 
@@ -29,7 +29,6 @@
 				float2 uv			: TEXCOORD0;
 			};
 			
-			uniform StructuredBuffer<int> triangles;
 			uniform StructuredBuffer<DataPerVertex> dataPerVertex;
 
 			v2f vert (uint vertexIndex : SV_VertexID)
@@ -59,7 +58,7 @@
 
 		Pass
 		{
-			Name "ShadowDraw"
+			Name "ShadowCaster"
 
 			CGPROGRAM
 

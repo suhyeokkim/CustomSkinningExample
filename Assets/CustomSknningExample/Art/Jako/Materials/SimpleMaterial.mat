@@ -7,8 +7,8 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: Default Material 1
-  m_Shader: {fileID: 4800000, guid: 91e5c3a0be120ed4b8eab2e85b3f015a, type: 3}
+  m_Name: SimpleMaterial
+  m_Shader: {fileID: 4800000, guid: c4210c473b3dd9946b610afcae4e3ce1, type: 3}
   m_ShaderKeywords: TENSION_COMPUTED_OFF
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
@@ -60,9 +60,11 @@ Material:
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
+    - _EdgeLength: 0.5
     - _GlossMapScale: 1
     - _Glossiness: 0
     - _GlossyReflections: 1
+    - _InsideDevide: 1
     - _Metallic: 0
     - _Mode: 0
     - _OcclusionStrength: 1
